@@ -1,7 +1,7 @@
 from unittest.mock import patch, MagicMock
 import httpx
 import pytest
-from app.services.sentiment import get_model_sentiment
+from app.services.sentiment import SentimentInference, get_model_sentiment
 from app.services.rss_news import parse_feed
 from app.config import settings
 
@@ -70,16 +70,27 @@ def test_parse_feed_uses_model_sentiment_and_falls_back(tmp_path):
         </rss>
         """
         # 1. Test using model sentiment
-        with patch("app.services.rss_news.get_model_sentiment", return_value=0.75):
+        with patch(
+            "app.services.rss_news.get_model_inference",
+            return_value=SentimentInference(
+                sentiment=0.75,
+                model_version="test-finbert-v1",
+                score_source="model",
+                raw_output={"label": "Positive"},
+            ),
+        ):
             items, _ = parse_feed(
                 RSS_SAMPLE.encode("utf-8"),
                 {"name": "Test Feed", "path": "/test", "language": "zh", "region": "CN"}
             )
             assert len(items) == 1
             assert items[0]["sentiment"] == 0.75
+            assert items[0]["model_version"] == "test-finbert-v1"
+            assert items[0]["score_source"] == "model"
+            assert '"label": "Positive"' in items[0]["model_raw_output"]
 
         # 2. Test falling back to rule-based sentiment
-        with patch("app.services.rss_news.get_model_sentiment", return_value=None):
+        with patch("app.services.rss_news.get_model_inference", return_value=None):
             items, _ = parse_feed(
                 RSS_SAMPLE.encode("utf-8"),
                 {"name": "Test Feed", "path": "/test", "language": "zh", "region": "CN"}
@@ -87,5 +98,7 @@ def test_parse_feed_uses_model_sentiment_and_falls_back(tmp_path):
             assert len(items) == 1
             # The content has no keywords from positive/negative list, so rule-based sentiment score should be 0.0
             assert items[0]["sentiment"] == 0.0
+            assert items[0]["model_version"] == "rule-keywords-v1"
+            assert items[0]["score_source"] == "rule"
     finally:
         object.__setattr__(settings, "database_path", original_path)

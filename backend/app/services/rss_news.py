@@ -16,7 +16,12 @@ from ..config import settings
 from ..schemas import NewsEvent
 from .lake import export_parquet_snapshots
 from .news_mapping import map_text_to_stocks, sync_stock_aliases
-from .sentiment import classify_event, score_text, get_model_sentiment
+from .sentiment import (
+    RULE_MODEL_VERSION,
+    classify_event,
+    get_model_inference,
+    score_text,
+)
 
 
 def _plain_text(value: str | None) -> str:
@@ -66,8 +71,8 @@ def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
         rule_sentiment, keywords = score_text(text)
         
         # Request DL sentiment model from decoupled model-service with fallback to dictionary lookup
-        model_sentiment = get_model_sentiment(text, lang=feed.get("language", "zh"))
-        sentiment = model_sentiment if model_sentiment is not None else rule_sentiment
+        inference = get_model_inference(text, lang=feed.get("language", "zh"))
+        sentiment = inference.sentiment if inference is not None else rule_sentiment
         
         event_type, event_keywords = classify_event(text)
         item_id = _news_id(feed["name"], url, title, published_at)
@@ -82,6 +87,15 @@ def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
             region=feed.get("region", "CN"),
             url=url,
             sentiment=sentiment,
+            model_version=(
+                inference.model_version if inference else RULE_MODEL_VERSION
+            ),
+            score_source=inference.score_source if inference else "rule",
+            model_raw_output=(
+                inference.raw_output
+                if inference
+                else {"sentiment": rule_sentiment, "keywords": keywords}
+            ),
             event_type=event_type,
             keywords=list(dict.fromkeys([*keywords, *event_keywords])),
             raw_payload={"feed_path": feed["path"], "guid": entry.get("id", "")},

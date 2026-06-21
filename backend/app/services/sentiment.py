@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from statistics import pstdev
 
@@ -129,6 +130,15 @@ EVENT_KEYWORDS = {
 }
 
 EVENT_PRIORITY = ("risk", "policy", "performance")
+RULE_MODEL_VERSION = "rule-keywords-v1"
+
+
+@dataclass(frozen=True)
+class SentimentInference:
+    sentiment: float
+    model_version: str
+    score_source: str
+    raw_output: dict
 
 
 def classify_event(text: str) -> tuple[str, list[str]]:
@@ -284,7 +294,7 @@ def aggregate_news(
     }
 
 
-def get_model_sentiment(text: str, lang: str = "zh") -> float | None:
+def get_model_inference(text: str, lang: str = "zh") -> SentimentInference | None:
     import logging
     from ..config import settings
     import httpx
@@ -299,7 +309,14 @@ def get_model_sentiment(text: str, lang: str = "zh") -> float | None:
         )
         if response.status_code == 200:
             data = response.json()
-            return float(data["sentiment"])
+            return SentimentInference(
+                sentiment=float(data["sentiment"]),
+                model_version=str(
+                    data.get("model_version") or f"unknown-finbert-{lang}"
+                ),
+                score_source="model",
+                raw_output=data,
+            )
         else:
             logger.warning(
                 f"Model service returned non-200 status code: {response.status_code}. "
@@ -312,3 +329,10 @@ def get_model_sentiment(text: str, lang: str = "zh") -> float | None:
             "Falling back to rule-based analysis."
         )
         return None
+
+
+def get_model_sentiment(text: str, lang: str = "zh") -> float | None:
+    """Backward-compatible score-only model client."""
+
+    inference = get_model_inference(text, lang)
+    return inference.sentiment if inference else None

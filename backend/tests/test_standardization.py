@@ -91,5 +91,8 @@ def test_existing_database_gets_amount_and_event_type_columns(tmp_path):
             }
         assert "amount" in price_columns
         assert "event_type" in news_columns
+        assert "model_version" in news_columns
+        assert "score_source" in news_columns
+        assert "model_raw_output" in news_columns
     finally:
         object.__setattr__(settings, "database_path", original_path)

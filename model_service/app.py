@@ -11,6 +11,10 @@ logger = logging.getLogger("model-service")
 
 # Global dict to store pipelines
 models = {}
+MODEL_IDS = {
+    "zh": "yiyanghkust/finbert-tone-chinese",
+    "en": "ProsusAI/finbert",
+}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,7 +26,7 @@ async def lifespan(app: FastAPI):
     try:
         models["zh"] = pipeline(
             "sentiment-analysis", 
-            model="yiyanghkust/finbert-tone-chinese", 
+            model=MODEL_IDS["zh"],
             top_k=None
         )
         logger.info("Successfully loaded Chinese model.")
@@ -33,7 +37,7 @@ async def lifespan(app: FastAPI):
     try:
         models["en"] = pipeline(
             "sentiment-analysis", 
-            model="ProsusAI/finbert", 
+            model=MODEL_IDS["en"],
             top_k=None
         )
         logger.info("Successfully loaded English model.")
@@ -61,6 +65,7 @@ class AnalyzeResponse(BaseModel):
     confidence: float
     label: str
     probabilities: dict[str, float]
+    model_version: str
 
 def calculate_continuous_score(predictions, pos_label: str, neg_label: str) -> tuple[float, float, str, dict[str, float]]:
     # Map predictions to lowercase dict for robust matching
@@ -111,7 +116,8 @@ def analyze(req: AnalyzeRequest):
             sentiment=0.0,
             confidence=1.0,
             label="Neutral" if lang == "zh" else "neutral",
-            probabilities={}
+            probabilities={},
+            model_version=MODEL_IDS[lang],
         )
 
     try:
@@ -132,7 +138,8 @@ def analyze(req: AnalyzeRequest):
             sentiment=sentiment_score,
             confidence=confidence,
             label=label,
-            probabilities=probs
+            probabilities=probs,
+            model_version=MODEL_IDS[lang],
         )
     except Exception as e:
         logger.error(f"Inference error: {e}")

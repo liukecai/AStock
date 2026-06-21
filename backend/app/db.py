@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS news_items (
     summary TEXT NOT NULL DEFAULT '',
     url TEXT,
     sentiment REAL NOT NULL DEFAULT 0,
+    model_version TEXT NOT NULL DEFAULT 'rule-keywords-v1',
+    score_source TEXT NOT NULL DEFAULT 'rule'
+        CHECK (score_source IN ('model', 'rule')),
+    model_raw_output TEXT NOT NULL DEFAULT '{}',
     event_type TEXT NOT NULL DEFAULT 'general',
     keywords TEXT NOT NULL DEFAULT '[]',
     raw_payload TEXT NOT NULL DEFAULT '{}',
@@ -134,6 +138,21 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE news_items ADD COLUMN event_type TEXT NOT NULL DEFAULT 'general'"
             )
+        if "model_version" not in news_columns:
+            conn.execute(
+                "ALTER TABLE news_items ADD COLUMN model_version TEXT NOT NULL "
+                "DEFAULT 'rule-keywords-v1'"
+            )
+        if "score_source" not in news_columns:
+            conn.execute(
+                "ALTER TABLE news_items ADD COLUMN score_source TEXT NOT NULL "
+                "DEFAULT 'rule'"
+            )
+        if "model_raw_output" not in news_columns:
+            conn.execute(
+                "ALTER TABLE news_items ADD COLUMN model_raw_output TEXT NOT NULL "
+                "DEFAULT '{}'"
+            )
         conn.execute("PRAGMA foreign_keys=ON")
         # Migration from the old news table to the unified news data layer if it exists
         old_table_exists = conn.execute(
@@ -203,22 +222,31 @@ def upsert_news_items(rows: list[dict[str, Any]]) -> None:
             """
             INSERT INTO news_items(
               id, source, source_type, language, region, published_at, title,
-              summary, url, sentiment, event_type, keywords, raw_payload, created_at
+              summary, url, sentiment, model_version, score_source,
+              model_raw_output, event_type, keywords, raw_payload, created_at
             ) VALUES (
               :id, :source, :source_type, :language, :region, :published_at, :title,
-              :summary, :url, :sentiment, :event_type, :keywords, :raw_payload,
-              :created_at
+              :summary, :url, :sentiment, :model_version, :score_source,
+              :model_raw_output, :event_type, :keywords, :raw_payload, :created_at
             )
             ON CONFLICT(id) DO UPDATE SET
               source=excluded.source, published_at=excluded.published_at,
               title=excluded.title, summary=excluded.summary, url=excluded.url,
               sentiment=excluded.sentiment, event_type=excluded.event_type,
+              model_version=excluded.model_version,
+              score_source=excluded.score_source,
+              model_raw_output=excluded.model_raw_output,
               keywords=excluded.keywords,
               raw_payload=excluded.raw_payload
             """,
             [
                 {
                     **item,
+                    "model_version": item.get(
+                        "model_version", "rule-keywords-v1"
+                    ),
+                    "score_source": item.get("score_source", "rule"),
+                    "model_raw_output": item.get("model_raw_output", "{}"),
                     "event_type": item.get("event_type", "general"),
                     "created_at": item.get("created_at", now),
                 }

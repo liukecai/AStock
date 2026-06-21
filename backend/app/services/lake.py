@@ -17,6 +17,7 @@ SNAPSHOTS = {
     "news/news_events.parquet": """
         SELECT id, source, source_type, language, region,
                published_at AS time, title, summary, url, sentiment,
+               model_version, score_source, model_raw_output,
                event_type, keywords
         FROM news_items ORDER BY published_at
     """,
@@ -49,4 +50,3 @@ def export_parquet_snapshots(names: tuple[str, ...] | None = None) -> dict[str, 
             temporary.replace(target)
             result[name] = len(frame)
     return result
-

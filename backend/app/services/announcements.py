@@ -9,7 +9,7 @@ from .. import db
 from ..config import settings
 from ..schemas import NewsEvent
 from .lake import export_parquet_snapshots
-from .sentiment import classify_event, score_text
+from .sentiment import RULE_MODEL_VERSION, classify_event, score_text
 
 
 def _announcement_id(url: str, symbol: str, title: str, published_at: str) -> str:
@@ -83,6 +83,12 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
                 source_type="announcement",
                 url=url,
                 sentiment=sentiment,
+                model_version=RULE_MODEL_VERSION,
+                score_source="rule",
+                model_raw_output={
+                    "sentiment": sentiment,
+                    "keywords": keywords,
+                },
                 event_type=event_type,
                 keywords=list(dict.fromkeys([*keywords, *event_keywords])),
             )
@@ -105,6 +111,9 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
                 "summary": r["summary"],
                 "url": r["url"],
                 "sentiment": r["sentiment"],
+                "model_version": r["model_version"],
+                "score_source": r["score_source"],
+                "model_raw_output": r["model_raw_output"],
                 "event_type": r["event_type"],
                 "keywords": r["keywords"],
                 "raw_payload": r["raw_payload"],
@@ -170,6 +179,12 @@ def rescore_cninfo_announcements() -> dict[str, int]:
         updates.append(
             (
                 sentiment,
+                RULE_MODEL_VERSION,
+                "rule",
+                json.dumps(
+                    {"sentiment": sentiment, "keywords": keywords},
+                    ensure_ascii=False,
+                ),
                 event_type,
                 json.dumps(
                     list(dict.fromkeys([*keywords, *event_keywords])),
@@ -182,7 +197,8 @@ def rescore_cninfo_announcements() -> dict[str, int]:
         conn.executemany(
             """
             UPDATE news_items
-            SET sentiment=?, event_type=?, keywords=?
+            SET sentiment=?, model_version=?, score_source=?,
+                model_raw_output=?, event_type=?, keywords=?
             WHERE id=?
             """,
             updates,

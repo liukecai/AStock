@@ -48,6 +48,9 @@ class NewsEvent(BaseModel):
     summary: str = ""
     url: str = ""
     sentiment: float = Field(default=0, ge=-1, le=1)
+    model_version: str = "rule-keywords-v1"
+    score_source: str = Field(default="rule", pattern="^(model|rule)$")
+    model_raw_output: dict[str, Any] = Field(default_factory=dict)
     event_type: str = "general"
     keywords: list[str] = Field(default_factory=list)
     raw_payload: dict[str, Any] = Field(default_factory=dict)
@@ -73,8 +76,12 @@ class NewsEvent(BaseModel):
             "summary": self.summary,
             "url": self.url,
             "sentiment": self.sentiment,
+            "model_version": self.model_version,
+            "score_source": self.score_source,
+            "model_raw_output": json.dumps(
+                self.model_raw_output, ensure_ascii=False
+            ),
             "event_type": self.event_type,
             "keywords": json.dumps(self.keywords, ensure_ascii=False),
             "raw_payload": json.dumps(self.raw_payload, ensure_ascii=False),
         }
-
