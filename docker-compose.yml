@@ -14,7 +14,6 @@ services:
       DEMO_DATA: "false"
       NEWS_HISTORY_DAYS: "7"
       RSSHUB_BASE_URL: http://rsshub:1200
-      MODEL_SERVICE_URL: http://model-service:8001
     volumes:
       - aquant_data:/app/data
     expose:
@@ -42,25 +41,6 @@ services:
     expose:
       - "1200"
 
-  model-service:
-    container_name: aquant-model-service
-    build: ./model_service
-    restart: unless-stopped
-    volumes:
-      - aquant_model_cache:/app/models_cache
-    environment:
-      - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
-      - HF_HOME=/app/models_cache
-    expose:
-      - "8001"
-    ports:
-      - "127.0.0.1:8001:8001"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   web:
     container_name: aquant-web
     build:
@@ -84,7 +64,6 @@ services:
 
 volumes:
   aquant_data:
-  aquant_model_cache:
 
 networks:
   caddy_proxy:
