@@ -110,12 +110,12 @@ flowchart LR
 
 | 主机 | 角色 | 配置 |
 | --- | --- | --- |
-| `ten`（云服务器） | 主服务节点，运行 API / Web / RSSHub | 低配云主机，负责调度、采集、API 和前端 |
-| `kecai-pc`（本地 PC） | 模型推理节点，运行 model-service | AMD 5900HS / 32 GB RAM，高性能本地机器 |
+| `cloud-server`（云服务器） | 主服务节点，运行 API / Web / RSSHub | 低配云主机，负责调度、采集、API 和前端 |
+| `local-pc`（本地 PC） | 模型推理节点，运行 model-service | 高性能本地机器（多核 CPU / 32 GB RAM） |
 
-两台机器通过 **Tailscale** 组网，`model-service` 容器在 `kecai-pc` 上以独立 Docker Compose 启动，通过 Tailscale IP 对 `ten` 上的 `aquant-api` 暴露 `:8001` 端口。
+两台机器通过 **VPN 隧道**组网，`model-service` 容器在本地 PC 上以独立 Docker Compose 启动，通过内网 IP 对云服务器上的 `aquant-api` 暴露 `:8001` 端口。
 
-### 3.2 云服务器容器（`ten`）
+### 3.2 云服务器容器
 
 | 容器 | 职责 | 内部端口 | 公网暴露 |
 | --- | --- | --- | --- |
@@ -123,7 +123,7 @@ flowchart LR
 | `aquant-rsshub` | 将国内外站点转换为 RSS | `1200` | 否 |
 | `aquant-web` | Vue 静态页面与 Nginx API 代理 | `80` | 通过外部反向代理 |
 
-### 3.3 本地模型节点容器（`kecai-pc`）
+### 3.3 本地模型节点容器
 
 | 容器 | 职责 | 端口 | 访问方式 |
 | --- | --- | --- | --- |
@@ -137,14 +137,14 @@ flowchart LR
     API --> RSSHub["aquant-rsshub :1200"]
     API --> DB[("SQLite Volume")]
 
-    subgraph ten["ten（云服务器）"]
+    subgraph cloud["云服务器"]
         Web
         API
         RSSHub
         DB
     end
 
-    subgraph kecai_pc["kecai-pc（本地）"]
+    subgraph localpc["本地 PC"]
         MS["aquant-model-service :8001"]
     end
 
@@ -188,12 +188,12 @@ AStock/
 │       ├── views/Dashboard.vue     # 信号榜单
 │       ├── views/StockDetail.vue   # 个股详情
 │       └── components/PriceChart.vue
-├── model_service/                  # 独立模型推理微服务（部署于 kecai-pc）
+├── model_service/                  # 独立模型推理微服务（部署于本地高性能 PC）
 │   ├── app.py                      # FastAPI 应用，加载 FinBERT-Chinese
 │   ├── Dockerfile                  # CPU 优化镜像（torch-cpu）
 │   ├── requirements.txt
-│   └── docker-compose.yml          # 独立 Compose，仅用于 kecai-pc
-├── docker-compose.yml              # 主 Compose（ten 云服务器）
+│   └── docker-compose.yml          # 独立 Compose，仅用于本地 PC
+├── docker-compose.yml              # 主 Compose（云服务器）
 └── docs/SYSTEM_ARCHITECTURE.md
 ```
 
@@ -459,7 +459,7 @@ Response: {"label": "positive|negative|neutral", "score": 0.XX}
 | `negative` | `-score`（0~-1） |
 | `neutral` | `0.0` |
 
-模型服务部署于 `kecai-pc`（AMD 5900HS / 32 GB），通过 Tailscale 内网对云服务器 `ten` 开放 `:8001` 端口，配置于 `MODEL_SERVICE_URL` 环境变量。
+模型服务部署于本地高性能 PC，通过内网 VPN 对云服务器开放 `:8001` 端口，配置于 `MODEL_SERVICE_URL` 环境变量。
 
 ### 10.2 降级路径：规则词典评分
 
@@ -754,7 +754,7 @@ TotalScore =
 | `RSS_FEEDS_JSON` | 内置源列表 | 自定义 RSSHub 路由 |
 | `DEMO_DATA` | `false` | 是否使用演示数据 |
 | `ENABLE_SCHEDULER` | `true` | 是否启用调度 |
-| `MODEL_SERVICE_URL` | `http://model-service:8001` | FinBERT 模型服务地址（生产指向 kecai-pc Tailscale IP） |
+| `MODEL_SERVICE_URL` | `http://model-service:8001` | FinBERT 模型服务地址（生产环境指向本地 PC 内网地址） |
 | `HF_ENDPOINT` | `https://huggingface.co` | HuggingFace 模型下载端点（国内可改为 hf-mirror.com） |
 
 ## 20. 已知技术债
@@ -780,7 +780,7 @@ TotalScore =
 
 ### 中期
 
-- [x] 1. 引入中文金融情绪模型和 FinBERT（已于 V1.4 完成：`yiyanghkust/finbert-tone-chinese`，部署于 kecai-pc）；
+- [x] 1. 引入中文金融情绪模型和 FinBERT（已于 V1.4 完成：`yiyanghkust/finbert-tone-chinese`，部署于本地高性能 PC）；
 2. 保存 NLP 模型版本与推理证据；
 3. 构建历史回测、交易成本和涨跌停约束；
 4. 计算因子 IC、分层收益、Sharpe 和最大回撤；
