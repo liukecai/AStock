@@ -53,6 +53,16 @@ def test_standard_schemas_and_parquet_snapshot(tmp_path):
         assert result["market/daily_prices.parquet"] == 1
         assert result["news/news_events.parquet"] == 1
         assert (tmp_path / "parquet/market/daily_prices.parquet").exists()
+        import pandas as pd
+
+        news_snapshot = pd.read_parquet(
+            tmp_path / "parquet/news/news_events.parquet"
+        )
+        assert {
+            "model_version",
+            "score_source",
+            "model_raw_output",
+        } <= set(news_snapshot.columns)
     finally:
         object.__setattr__(settings, "database_path", original_path)
         object.__setattr__(settings, "data_dir", original_data_dir)
