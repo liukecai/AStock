@@ -150,6 +150,29 @@ def test_commodity_event_scoring_and_api(tmp_path):
             assert slump_scores["601857"]["direction"] == "harm"
             assert slump_scores["601111"]["direction"] == "benefit"
 
+            supply_recovery = client.post(
+                "/api/events/analyze",
+                json={
+                    "title": "伊拉克计划恢复原油产量并逐步增产",
+                    "summary": "原油日产量将恢复到危机前水平。",
+                    "time": "2026-06-22T12:00:00",
+                },
+            )
+            assert supply_recovery.status_code == 200
+            recovery_payload = supply_recovery.json()
+            assert recovery_payload["direction"] == "harm"
+            assert recovery_payload["commodity_impacts"][0]["impact_type"] == "supply_increase"
+
+            generic_mention = client.post(
+                "/api/events/analyze",
+                json={
+                    "title": "公司发布年度原油业务报告",
+                    "summary": "报告介绍常规经营情况。",
+                    "time": "2026-06-22T13:00:00",
+                },
+            )
+            assert generic_mention.status_code == 422
+
             # 6. Test POST /api/events/rebuild
             # Insert a news item to database directly that matches WF6 (中船特气)
             with connect() as conn:
@@ -167,8 +190,8 @@ def test_commodity_event_scoring_and_api(tmp_path):
                         "zh",
                         "CN",
                         "2026-06-22T10:00:00",
-                        "中船特气签订大单，六氟化钨（WF6）国内市占率居首",
-                        "公告显示，公司新签订六氟化钨特气订单，保障半导体先进制程供应。",
+                        "六氟化钨供应紧张，中船特气签订大单",
+                        "公告显示，公司新签订六氟化钨特气订单，缓解半导体先进制程供应短缺。",
                         0.8,
                         "[]",
                         "{}",

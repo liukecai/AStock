@@ -88,7 +88,13 @@ COMMODITY_KB = {
 
 EVENT_TYPE_KEYWORDS = {
     "geo_conflict": ["地缘", "战争", "军事", "红海", "袭击", "制裁", "冲突", "俄乌", "巴以", "紧张局势"],
-    "supply_shock": ["供应中断", "减产", "停产", "断供", "供应受限", "紧张", "短缺", "供给偏紧", "库存大跌", "库存减少"],
+    "supply_shock": [
+        "供应中断", "减产", "停产", "断供", "供应受限", "紧张", "短缺",
+        "吃紧", "供给偏紧", "库存大跌", "库存减少", "供应过剩",
+        "供给过剩", "库存激增", "增产", "扩产", "恢复产量", "提高产量",
+        "需求疲弱", "需求下降", "需求萎缩", "消费低迷", "暴涨", "大涨",
+        "上涨", "暴跌", "大跌", "下跌",
+    ],
     "policy_change": ["政策", "收储", "出口管制", "加税", "关税", "环保督察", "规划", "退税", "补贴", "准入"],
     "disruption": ["罢工", "地震", "停电", "事故", "洪涝", "飓风", "火灾", "暴雨", "恶劣天气"]
 }
@@ -105,16 +111,18 @@ def identify_commodity(text: str) -> str | None:
             return comm
     return None
 
-def identify_event_type(text: str) -> tuple[str, str]:
+def identify_event_type(text: str) -> tuple[str, str] | None:
     lowered = text.lower()
-    best_type = "supply_shock"
+    best_type = ""
     max_matches = 0
     for etype, kws in EVENT_TYPE_KEYWORDS.items():
         matches = sum(1 for kw in kws if kw in lowered)
         if matches > max_matches:
             max_matches = matches
             best_type = etype
-            
+    if not best_type:
+        return None
+
     # Determine subtype
     subtype = "general"
     if best_type == "geo_conflict":
@@ -138,6 +146,8 @@ def identify_event_type(text: str) -> tuple[str, str]:
 
 def identify_commodity_shock(text: str) -> str:
     lowered = text.lower()
+    if any(kw in lowered for kw in ["恢复产量", "增产", "扩产", "提高产量"]):
+        return "supply_increase"
     if any(kw in lowered for kw in ["需求疲弱", "需求下降", "需求萎缩", "消费低迷"]):
         return "demand_weakness"
     if any(kw in lowered for kw in ["供应过剩", "供给过剩", "库存激增", "产能过剩"]):
@@ -154,7 +164,7 @@ def identify_commodity_shock(text: str) -> str:
 def commodity_impact_direction(text: str, impact_type: str) -> str:
     lowered = text.lower()
     price_decline = ["暴跌", "大跌", "下跌", "跳水", "价格走低", "价格承压"]
-    if impact_type in {"demand_weakness", "oversupply"}:
+    if impact_type in {"demand_weakness", "oversupply", "supply_increase"}:
         return "harm"
     if any(keyword in lowered for keyword in price_decline):
         return "harm"
@@ -194,8 +204,11 @@ def analyze_event_text(
     if not commodity:
         return None  # No relevant commodity event detected
         
-    event_type, subtype = identify_event_type(title + " " + summary)
     source_text = title + " " + summary
+    event_classification = identify_event_type(source_text)
+    if not event_classification:
+        return None
+    event_type, subtype = event_classification
     impact_type = identify_commodity_shock(source_text)
     intensity, confidence = extract_intensity_confidence(title, summary)
     direction = commodity_impact_direction(source_text, impact_type)
