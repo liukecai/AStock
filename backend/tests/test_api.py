@@ -18,6 +18,7 @@ def test_dashboard_and_detail_api(tmp_path):
             health = client.get("/api/health")
             assert health.status_code == 200
             assert health.json()["stock_count"] == 8
+            assert health.json()["news_count"] > 0
 
             dashboard = client.get("/api/dashboard")
             assert dashboard.status_code == 200

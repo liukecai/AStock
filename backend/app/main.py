@@ -14,6 +14,7 @@ from .services.announcements import update_cninfo_announcements
 from .services.demo import seed_demo_data
 from .services.market import update_market_data
 from .services.pipeline import run_signal_pipeline
+from .services.rss_news import update_rss_news
 
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
 
@@ -21,6 +22,7 @@ scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
 def refresh_all() -> None:
     update_market_data()
     update_cninfo_announcements()
+    update_rss_news()
     run_signal_pipeline()
 
 
@@ -48,6 +50,24 @@ async def lifespan(_: FastAPI):
             hour=settings.signal_update_hour,
             minute=settings.signal_update_minute,
             id="daily-signals",
+            replace_existing=True,
+            max_instances=1,
+        )
+        scheduler.add_job(
+            update_rss_news,
+            "cron",
+            hour="*",
+            minute=settings.rss_update_minute,
+            id="hourly-rss-news",
+            replace_existing=True,
+            max_instances=1,
+        )
+        scheduler.add_job(
+            run_signal_pipeline,
+            "cron",
+            hour="*",
+            minute=min(settings.rss_update_minute + 10, 59),
+            id="hourly-rss-signals",
             replace_existing=True,
             max_instances=1,
         )

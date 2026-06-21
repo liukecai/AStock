@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+import hashlib
+import html
+import json
+import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from urllib.parse import urljoin
+
+import feedparser
+import httpx
+
+from .. import db
+from ..config import settings
+from .news_mapping import map_text_to_stocks, sync_stock_aliases
+from .sentiment import score_text
+
+
+def _plain_text(value: str | None) -> str:
+    if not value:
+        return ""
+    without_tags = re.sub(r"<[^>]+>", " ", value)
+    return re.sub(r"\s+", " ", html.unescape(without_tags)).strip()
+
+
+def _published_at(entry: dict) -> str:
+    for key in ("published", "updated", "created"):
+        value = entry.get(key)
+        if not value:
+            continue
+        try:
+            parsed = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+        if parsed.tzinfo:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed.replace(microsecond=0).isoformat()
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def _news_id(source: str, url: str, title: str, published_at: str) -> str:
+    value = url.strip() or f"{source}|{title}|{published_at}"
+    return "rss:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
+    parsed = feedparser.parse(payload)
+    items: list[dict] = []
+    links: list[dict] = []
+    for entry in parsed.entries:
+        title = _plain_text(entry.get("title"))
+        summary = _plain_text(
+            entry.get("summary")
+            or entry.get("description")
+            or (entry.get("content") or [{}])[0].get("value")
+        )
+        url = str(entry.get("link", "")).strip()
+        published_at = _published_at(entry)
+        text = f"{title}。{summary}"
+        sentiment, keywords = score_text(text)
+        item_id = _news_id(feed["name"], url, title, published_at)
+        items.append(
+            {
+                "id": item_id,
+                "source": feed["name"],
+                "source_type": "rss",
+                "language": feed.get("language", "zh"),
+                "region": feed.get("region", "CN"),
+                "published_at": published_at,
+                "title": title,
+                "summary": summary[:4000],
+                "url": url,
+                "sentiment": sentiment,
+                "keywords": json.dumps(keywords, ensure_ascii=False),
+                "raw_payload": json.dumps(
+                    {"feed_path": feed["path"], "guid": entry.get("id", "")},
+                    ensure_ascii=False,
+                ),
+            }
+        )
+        for match in map_text_to_stocks(text):
+            links.append(
+                {
+                    "news_id": item_id,
+                    "symbol": match.symbol,
+                    "confidence": match.confidence,
+                    "match_type": f"{match.match_type}:{match.alias}",
+                }
+            )
+    return items, links
+
+
+def update_rss_news() -> dict:
+    db.init_db()
+    sync_stock_aliases()
+    started_at = datetime.now().replace(microsecond=0).isoformat()
+    feeds = list(settings.rss_feeds)
+    db.update_job(
+        "rss_news_update",
+        "running",
+        total=len(feeds),
+        message=f"正在更新 {len(feeds)} 个 RSS 新闻源",
+        started_at=started_at,
+    )
+    totals = {"feeds": len(feeds), "succeeded": 0, "failed": 0, "items": 0, "links": 0}
+    errors: list[dict] = []
+
+    with httpx.Client(
+        timeout=45,
+        headers={"User-Agent": "A-Quant-Insight/0.2 RSS reader"},
+        follow_redirects=True,
+    ) as client:
+        for index, feed in enumerate(feeds, start=1):
+            try:
+                url = urljoin(settings.rsshub_base_url + "/", feed["path"].lstrip("/"))
+                response = client.get(url)
+                response.raise_for_status()
+                items, links = parse_feed(response.content, feed)
+                db.upsert_news_items(items)
+                db.upsert_news_links(links)
+                totals["succeeded"] += 1
+                totals["items"] += len(items)
+                totals["links"] += len(links)
+            except Exception as exc:
+                totals["failed"] += 1
+                errors.append({"source": feed["name"], "error": str(exc)[:300]})
+            db.update_job(
+                "rss_news_update",
+                "running",
+                current=index,
+                total=len(feeds),
+                message=f"已处理 {index}/{len(feeds)} 个 RSS 源",
+                details={**totals, "errors": errors},
+                started_at=started_at,
+            )
+
+    status = "completed" if totals["succeeded"] else "failed"
+    details = {**totals, "errors": errors}
+    db.update_job(
+        "rss_news_update",
+        status,
+        current=len(feeds),
+        total=len(feeds),
+        message=(
+            f"RSS 新闻完成：{totals['succeeded']} 成功，{totals['failed']} 失败，"
+            f"{totals['items']} 篇，{totals['links']} 个股票映射"
+        ),
+        details=details,
+        started_at=started_at,
+        finished_at=datetime.now().replace(microsecond=0).isoformat(),
+    )
+    return details
+

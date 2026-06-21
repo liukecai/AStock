@@ -46,6 +46,45 @@ CREATE TABLE IF NOT EXISTS news (
 CREATE INDEX IF NOT EXISTS idx_news_symbol_date
 ON news(symbol, published_at DESC);
 
+CREATE TABLE IF NOT EXISTS news_items (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    language TEXT NOT NULL DEFAULT 'zh',
+    region TEXT NOT NULL DEFAULT 'CN',
+    published_at TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    url TEXT,
+    sentiment REAL NOT NULL DEFAULT 0,
+    keywords TEXT NOT NULL DEFAULT '[]',
+    raw_payload TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_items_date
+ON news_items(published_at DESC);
+
+CREATE TABLE IF NOT EXISTS news_stock_links (
+    news_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1,
+    match_type TEXT NOT NULL DEFAULT 'symbol',
+    PRIMARY KEY (news_id, symbol),
+    FOREIGN KEY (news_id) REFERENCES news_items(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_links_symbol
+ON news_stock_links(symbol, news_id);
+
+CREATE TABLE IF NOT EXISTS stock_aliases (
+    alias TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    language TEXT NOT NULL DEFAULT 'zh',
+    confidence REAL NOT NULL DEFAULT 0.9,
+    PRIMARY KEY (alias, symbol)
+);
+
 CREATE TABLE IF NOT EXISTS signals (
     symbol TEXT NOT NULL,
     signal_date TEXT NOT NULL,
@@ -93,6 +132,26 @@ def connect() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO news_items(
+              id, source, source_type, language, region, published_at, title,
+              summary, url, sentiment, keywords, raw_payload, created_at
+            )
+            SELECT id, source,
+              CASE WHEN source='巨潮资讯' THEN 'announcement' ELSE 'legacy' END,
+              'zh', 'CN', published_at, title, '', url, sentiment, keywords,
+              '{}', datetime('now')
+            FROM news
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO news_stock_links(news_id, symbol, confidence, match_type)
+            SELECT id, symbol, 1, 'legacy' FROM news
+            """
+        )
 
 
 def upsert_stock(symbol: str, name: str, industry: str = "未分类") -> None:
@@ -133,6 +192,77 @@ def upsert_news(rows: list[dict[str, Any]]) -> None:
             ON CONFLICT(id) DO UPDATE SET
               title=excluded.title, url=excluded.url, sentiment=excluded.sentiment,
               keywords=excluded.keywords
+            """,
+            rows,
+        )
+    items = [
+        {
+            "id": item["id"],
+            "source": item["source"],
+            "source_type": "announcement"
+            if item["source"] == "巨潮资讯"
+            else "legacy",
+            "language": "zh",
+            "region": "CN",
+            "published_at": item["published_at"],
+            "title": item["title"],
+            "summary": "",
+            "url": item.get("url", ""),
+            "sentiment": item["sentiment"],
+            "keywords": item["keywords"],
+            "raw_payload": "{}",
+        }
+        for item in rows
+    ]
+    upsert_news_items(items)
+    upsert_news_links(
+        [
+            {
+                "news_id": item["id"],
+                "symbol": item["symbol"],
+                "confidence": 1.0,
+                "match_type": "announcement",
+            }
+            for item in rows
+        ]
+    )
+
+
+def upsert_news_items(rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    now = datetime.now().replace(microsecond=0).isoformat()
+    with connect() as conn:
+        conn.executemany(
+            """
+            INSERT INTO news_items(
+              id, source, source_type, language, region, published_at, title,
+              summary, url, sentiment, keywords, raw_payload, created_at
+            ) VALUES (
+              :id, :source, :source_type, :language, :region, :published_at, :title,
+              :summary, :url, :sentiment, :keywords, :raw_payload, :created_at
+            )
+            ON CONFLICT(id) DO UPDATE SET
+              source=excluded.source, published_at=excluded.published_at,
+              title=excluded.title, summary=excluded.summary, url=excluded.url,
+              sentiment=excluded.sentiment, keywords=excluded.keywords,
+              raw_payload=excluded.raw_payload
+            """,
+            [{**item, "created_at": item.get("created_at", now)} for item in rows],
+        )
+
+
+def upsert_news_links(rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    with connect() as conn:
+        conn.executemany(
+            """
+            INSERT INTO news_stock_links(news_id, symbol, confidence, match_type)
+            VALUES (:news_id, :symbol, :confidence, :match_type)
+            ON CONFLICT(news_id, symbol) DO UPDATE SET
+              confidence=MAX(news_stock_links.confidence, excluded.confidence),
+              match_type=excluded.match_type
             """,
             rows,
         )

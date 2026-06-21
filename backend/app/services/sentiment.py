@@ -38,6 +38,29 @@ NEGATIVE_WORDS = {
     "冻结": -0.55,
     "违规": -0.6,
 }
+POSITIVE_ENGLISH = {
+    "growth": 0.35,
+    "surge": 0.45,
+    "rally": 0.4,
+    "upgrade": 0.4,
+    "record high": 0.5,
+    "profit": 0.3,
+    "beats expectations": 0.55,
+    "approval": 0.35,
+    "buyback": 0.5,
+}
+NEGATIVE_ENGLISH = {
+    "loss": -0.45,
+    "plunge": -0.65,
+    "downgrade": -0.45,
+    "investigation": -0.55,
+    "sanction": -0.55,
+    "default": -0.8,
+    "recall": -0.4,
+    "fraud": -0.8,
+    "layoff": -0.4,
+    "misses expectations": -0.5,
+}
 
 
 def score_text(text: str) -> tuple[float, list[str]]:
@@ -60,6 +83,10 @@ def score_text(text: str) -> tuple[float, list[str]]:
         ):
             continue
         if word in text:
+            hits.append((word, weight))
+    lowered = text.casefold()
+    for word, weight in {**POSITIVE_ENGLISH, **NEGATIVE_ENGLISH}.items():
+        if word in lowered:
             hits.append((word, weight))
     if not hits:
         return 0.0, []

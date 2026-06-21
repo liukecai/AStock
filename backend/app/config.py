@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,6 +52,26 @@ class Settings:
     )
     news_history_days: int = field(
         default_factory=lambda: int(os.getenv("NEWS_HISTORY_DAYS", "7"))
+    )
+    rsshub_base_url: str = field(
+        default_factory=lambda: os.getenv("RSSHUB_BASE_URL", "http://rsshub:1200").rstrip("/")
+    )
+    rss_update_minute: int = field(
+        default_factory=lambda: int(os.getenv("RSS_UPDATE_MINUTE", "15"))
+    )
+    rss_feeds: tuple[dict, ...] = field(
+        default_factory=lambda: tuple(
+            json.loads(os.getenv("RSS_FEEDS_JSON", "null"))
+            or [
+                {"name": "财联社电报", "path": "/cls/telegraph", "language": "zh", "region": "CN"},
+                {"name": "华尔街见闻股市", "path": "/wallstreetcn/news/shares", "language": "zh", "region": "CN"},
+                {"name": "华尔街见闻公司", "path": "/wallstreetcn/news/enterprise", "language": "zh", "region": "CN"},
+                {"name": "36氪快讯", "path": "/36kr/newsflashes", "language": "zh", "region": "CN"},
+                {"name": "Bloomberg Markets", "path": "/bloomberg/markets", "language": "en", "region": "GLOBAL"},
+                {"name": "Bloomberg Business", "path": "/bloomberg/bbiz", "language": "en", "region": "GLOBAL"},
+                {"name": "Al Jazeera Economy", "path": "/aljazeera/english/economy", "language": "en", "region": "GLOBAL"},
+            ]
+        )
     )
     market_provider: str = field(
         default_factory=lambda: os.getenv("MARKET_PROVIDER", "akshare")

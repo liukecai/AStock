@@ -23,10 +23,13 @@ def health() -> dict:
     return {
         "status": "ok",
         "provider": "akshare",
-        "news_provider": "cninfo",
+        "news_provider": "cninfo+rsshub",
         "latest_trade_date": db.latest_trade_date(),
         "stock_count": db.row("SELECT COUNT(*) AS count FROM stocks")["count"],
-        "news_count": db.row("SELECT COUNT(*) AS count FROM news")["count"],
+        "news_count": db.row("SELECT COUNT(*) AS count FROM news_items")["count"],
+        "news_link_count": db.row(
+            "SELECT COUNT(*) AS count FROM news_stock_links"
+        )["count"],
         "market_job": job,
     }
 
@@ -76,8 +79,13 @@ def stock_detail(symbol: str) -> dict:
     prices.reverse()
     news = db.rows(
         """
-        SELECT published_at, title, source, url, sentiment, keywords
-        FROM news WHERE symbol=? ORDER BY published_at DESC LIMIT 30
+        SELECT n.published_at, n.title, n.summary, n.source, n.source_type,
+               n.language, n.region, n.url, n.sentiment, n.keywords,
+               l.confidence, l.match_type
+        FROM news_items n
+        JOIN news_stock_links l ON l.news_id=n.id
+        WHERE l.symbol=?
+        ORDER BY n.published_at DESC LIMIT 50
         """,
         (symbol,),
     )

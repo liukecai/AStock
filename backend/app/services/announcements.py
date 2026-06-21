@@ -44,7 +44,7 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
             """
         )
     latest = db.row(
-        "SELECT MAX(published_at) AS value FROM news WHERE source='巨潮资讯'"
+        "SELECT MAX(published_at) AS value FROM news_items WHERE source='巨潮资讯'"
     )
     if latest and latest["value"]:
         start = datetime.fromisoformat(latest["value"]).date() - timedelta(days=1)
@@ -123,10 +123,12 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
 
 
 def rescore_cninfo_announcements() -> dict[str, int]:
-    items = db.rows("SELECT id, title FROM news WHERE source='巨潮资讯'")
+    items = db.rows(
+        "SELECT id, title, summary FROM news_items WHERE source='巨潮资讯'"
+    )
     updates = []
     for item in items:
-        sentiment, keywords = score_text(item["title"])
+        sentiment, keywords = score_text(f"{item['title']}。{item['summary']}")
         updates.append(
             (
                 sentiment,
@@ -135,6 +137,10 @@ def rescore_cninfo_announcements() -> dict[str, int]:
             )
         )
     with db.connect() as conn:
+        conn.executemany(
+            "UPDATE news_items SET sentiment=?, keywords=? WHERE id=?",
+            updates,
+        )
         conn.executemany(
             "UPDATE news SET sentiment=?, keywords=? WHERE id=?",
             updates,

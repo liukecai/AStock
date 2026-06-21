@@ -6,3 +6,4 @@ apscheduler==3.11.0
 httpx==0.28.1
 pytest==8.3.5
 akshare==1.18.64
+feedparser==6.0.12

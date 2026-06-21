@@ -38,8 +38,12 @@ def run_signal_pipeline() -> dict[str, int | str]:
             trend = calculate_trend(pd.DataFrame(price_rows))
             news_rows = db.rows(
                 """
-                SELECT published_at, title, source, url, sentiment, keywords
-                FROM news WHERE symbol=? ORDER BY published_at DESC LIMIT 100
+                SELECT n.published_at, n.title, n.source, n.source_type, n.url,
+                       n.sentiment, n.keywords, l.confidence
+                FROM news_items n
+                JOIN news_stock_links l ON l.news_id=n.id
+                WHERE l.symbol=?
+                ORDER BY n.published_at DESC LIMIT 200
                 """,
                 (symbol,),
             )
