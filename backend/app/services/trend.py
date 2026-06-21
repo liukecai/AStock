@@ -32,9 +32,9 @@ def calculate_trend(prices: pd.DataFrame) -> dict[str, float | bool]:
 
     structure = 1.0 if ma5 > ma20 > ma60 else 0.0
     slope_component = float(np.clip(price_slope20 * 120, 0, 1))
-    momentum_component = float(np.clip((momentum20 + 0.05) / 0.25, 0, 1))
+    volume_component = float(np.clip(volume_ratio / 2, 0, 1))
     trend_score = 100 * (
-        0.45 * structure + 0.35 * slope_component + 0.20 * momentum_component
+        0.40 * structure + 0.30 * slope_component + 0.30 * volume_component
     )
 
     return {
@@ -46,7 +46,9 @@ def calculate_trend(prices: pd.DataFrame) -> dict[str, float | bool]:
         "ma60_slope": round(ma60_slope, 6),
         "momentum20": round(momentum20, 4),
         "volume_ratio": round(volume_ratio, 3),
+        "ma_structure_component": round(structure * 100, 2),
+        "slope_component": round(slope_component * 100, 2),
+        "trend_volume_component": round(volume_component * 100, 2),
         "bullish": bullish,
         "trend_score": round(float(np.clip(trend_score, 0, 100)), 2),
     }
-

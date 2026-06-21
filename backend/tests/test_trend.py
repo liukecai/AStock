@@ -20,6 +20,12 @@ def test_rising_series_is_bullish():
     result = calculate_trend(frame)
     assert result["bullish"] is True
     assert result["trend_score"] > 70
+    expected = (
+        0.4 * result["ma_structure_component"]
+        + 0.3 * result["slope_component"]
+        + 0.3 * result["trend_volume_component"]
+    )
+    assert result["trend_score"] == round(expected, 2)
 
 
 def test_keyword_sentiment_is_deterministic():
