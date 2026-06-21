@@ -10,7 +10,8 @@ async function request(path, options) {
 }
 
 export const api = {
-  dashboard: () => request("/dashboard"),
+  dashboard: (page = 1, limit = 50, status = "全部") =>
+    request(`/dashboard?page=${page}&limit=${limit}&status=${encodeURIComponent(status)}`),
   stock: (symbol) => request(`/stocks/${symbol}`),
   runPipeline: () => request("/pipeline/run", { method: "POST" }),
 };

@@ -9,16 +9,21 @@ const refreshing = ref(false);
 const error = ref("");
 const activeFilter = ref("全部");
 
+const page = ref(1);
+const limit = ref(50);
+const totalPages = ref(0);
+const totalSignals = ref(0);
+
 const filters = ["全部", "主升浪信号", "趋势股", "观察"];
-const visibleSignals = computed(() =>
-  activeFilter.value === "全部"
-    ? data.value.signals
-    : data.value.signals.filter((item) => item.status === activeFilter.value),
-);
+const visibleSignals = computed(() => data.value.signals || []);
 
 async function load() {
+  loading.value = true;
   try {
-    data.value = await api.dashboard();
+    const res = await api.dashboard(page.value, limit.value, activeFilter.value);
+    data.value = res;
+    totalPages.value = res.pagination?.total_pages || 0;
+    totalSignals.value = res.pagination?.total || 0;
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -26,10 +31,25 @@ async function load() {
   }
 }
 
+function setFilter(filter) {
+  activeFilter.value = filter;
+  page.value = 1;
+  load();
+}
+
+function changePage(delta) {
+  const newPage = page.value + delta;
+  if (newPage >= 1 && newPage <= totalPages.value) {
+    page.value = newPage;
+    load();
+  }
+}
+
 async function refresh() {
   refreshing.value = true;
   try {
     await api.runPipeline();
+    page.value = 1;
     await load();
   } finally {
     refreshing.value = false;
@@ -89,7 +109,7 @@ onMounted(load);
           v-for="filter in filters"
           :key="filter"
           :class="{ active: activeFilter === filter }"
-          @click="activeFilter = filter"
+          @click="setFilter(filter)"
         >
           {{ filter }}
         </button>
@@ -129,6 +149,11 @@ onMounted(load);
         <ScoreRing :value="item.total_score" />
       </RouterLink>
       <div v-if="!loading && !visibleSignals.length" class="empty-state">当前筛选下没有信号</div>
+      <div v-if="totalPages > 1" class="pagination">
+        <button :disabled="page <= 1" @click="changePage(-1)">上一页</button>
+        <span class="page-info">第 {{ page }} 页 / 共 {{ totalPages }} 页 (共 {{ totalSignals }} 条)</span>
+        <button :disabled="page >= totalPages" @click="changePage(1)">下一页</button>
+      </div>
     </div>
   </section>
 </template>

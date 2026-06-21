@@ -154,3 +154,35 @@ footer { max-width: 1240px; margin: auto; padding: 30px 24px; border-top: 1px so
   .news-list time { display: none; }
   footer { display: block; line-height: 2; }
 }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 18px;
+  border-top: 1px solid var(--line);
+}
+.pagination button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 8px 16px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+.pagination button:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--lime);
+  color: var(--lime);
+}
+.pagination button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.pagination .page-info {
+  color: var(--muted);
+  font-size: 11px;
+}

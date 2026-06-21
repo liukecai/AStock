@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -36,37 +37,88 @@ def health() -> dict:
 
 
 @router.get("/dashboard")
-def dashboard(limit: int = Query(20, ge=1, le=100)) -> dict:
+def dashboard(
+    status: Annotated[str | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=10000)] = 100,
+) -> dict:
     latest = db.row("SELECT MAX(signal_date) AS value FROM signals")
     signal_date = latest["value"] if latest else None
     if not signal_date:
-        return {"signal_date": None, "signals": [], "summary": {}}
+        return {
+            "signal_date": None,
+            "signals": [],
+            "summary": {},
+            "pagination": {"page": page, "limit": limit, "total": 0, "total_pages": 0},
+        }
+
+    # Macro statistics for the day based on all signals for the signal_date
+    all_signals = db.rows(
+        "SELECT total_score, burst, metrics FROM signals WHERE signal_date=?",
+        (signal_date,),
+    )
+    total_universe = len(all_signals)
+    bullish_count = 0
+    hot_count = 0
+    total_score_sum = 0.0
+    for s in all_signals:
+        total_score_sum += s["total_score"]
+        if s["burst"] >= 3:
+            hot_count += 1
+        metrics = json.loads(s["metrics"])
+        if metrics.get("bullish"):
+            bullish_count += 1
+    average_score = round(total_score_sum / max(total_universe, 1), 2)
+
+    # Filtering logic
+    where_clause = "WHERE s.signal_date=?"
+    params = [signal_date]
+    if status and status != "全部":
+        where_clause += " AND s.status=?"
+        params.append(status)
+
+    if status and status != "全部":
+        total_filtered = db.row(
+            "SELECT COUNT(*) AS count FROM signals WHERE signal_date=? AND status=?",
+            (signal_date, status),
+        )["count"]
+    else:
+        total_filtered = total_universe
+
+    offset = (page - 1) * limit
     items = db.rows(
-        """
+        f"""
         SELECT s.*, st.name, st.industry
         FROM signals s JOIN stocks st USING(symbol)
-        WHERE s.signal_date=?
-        ORDER BY s.total_score DESC LIMIT ?
+        {where_clause}
+        ORDER BY s.total_score DESC LIMIT ? OFFSET ?
         """,
-        (signal_date, limit),
+        (*params, limit, offset),
     )
     decoded = [_decode_signal(item) for item in items]
+
     return {
         "signal_date": signal_date,
         "signals": decoded,
         "summary": {
-            "stock_count": len(decoded),
-            "bullish_count": sum(item["metrics"]["bullish"] for item in decoded),
-            "hot_count": sum(item["burst"] >= 3 for item in decoded),
-            "average_score": round(
-                sum(item["total_score"] for item in decoded) / max(len(decoded), 1), 2
-            ),
+            "stock_count": total_universe,
+            "bullish_count": bullish_count,
+            "hot_count": hot_count,
+            "average_score": average_score,
+        },
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total_filtered,
+            "total_pages": (total_filtered + limit - 1) // limit if total_filtered > 0 else 0,
         },
     }
 
 
 @router.get("/stocks/today")
-def stocks_today(top_n: int = Query(20, ge=1, le=100)) -> dict:
+def stocks_today(
+    top_n: Annotated[int, Query(ge=1, le=10000)] = 100
+) -> dict:
     """Compatibility endpoint for today's ranked Top N research list."""
 
     return dashboard(limit=top_n)
@@ -74,8 +126,8 @@ def stocks_today(top_n: int = Query(20, ge=1, le=100)) -> dict:
 
 @router.get("/signal")
 def signal(
-    symbol: str | None = Query(None, min_length=6, max_length=6),
-    limit: int = Query(20, ge=1, le=100),
+    symbol: Annotated[str | None, Query(min_length=6, max_length=6)] = None,
+    limit: Annotated[int, Query(ge=1, le=10000)] = 100,
 ) -> dict:
     if symbol:
         item = db.row(
