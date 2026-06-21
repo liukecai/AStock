@@ -1,0 +1,2 @@
+# Optional live-market provider. Kept separate because upstream releases change often.
+akshare==1.18.64

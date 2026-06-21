@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from threading import Thread
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from . import db
+from .api import router
+from .config import settings
+from .services.announcements import update_cninfo_announcements
+from .services.demo import seed_demo_data
+from .services.market import update_market_data
+from .services.pipeline import run_signal_pipeline
+
+scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+
+
+def refresh_all() -> None:
+    update_market_data()
+    update_cninfo_announcements()
+    run_signal_pipeline()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    db.init_db()
+    if settings.demo_data:
+        seed_demo_data()
+        run_signal_pipeline()
+    elif not db.latest_trade_date():
+        Thread(target=refresh_all, name="initial-market-bootstrap", daemon=True).start()
+    if settings.enable_scheduler:
+        scheduler.add_job(
+            update_market_data,
+            "cron",
+            hour=settings.market_update_hour,
+            minute=settings.market_update_minute,
+            id="daily-market-update",
+            replace_existing=True,
+            max_instances=1,
+        )
+        scheduler.add_job(
+            run_signal_pipeline,
+            "cron",
+            hour=settings.signal_update_hour,
+            minute=settings.signal_update_minute,
+            id="daily-signals",
+            replace_existing=True,
+            max_instances=1,
+        )
+        scheduler.add_job(
+            update_cninfo_announcements,
+            "cron",
+            hour=settings.news_update_hour,
+            minute=settings.news_update_minute,
+            id="daily-cninfo-update",
+            replace_existing=True,
+            max_instances=1,
+        )
+        scheduler.add_job(
+            run_signal_pipeline,
+            "cron",
+            hour=settings.news_update_hour,
+            minute=min(settings.news_update_minute + 15, 59),
+            id="nightly-news-signals",
+            replace_existing=True,
+            max_instances=1,
+        )
+        scheduler.start()
+    yield
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    description="A股趋势与舆情融合量化选股 API",
+    lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.cors_origins),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(router)
+
+
+@app.get("/")
+def root() -> dict:
+    return {"name": settings.app_name, "docs": "/docs", "health": "/api/health"}

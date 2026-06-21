@@ -1,0 +1,55 @@
+services:
+  api:
+    container_name: aquant-api
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/aquant.db
+      DATA_DIR: /app/data
+      MARKET_PROVIDER: akshare
+      AKSHARE_SOURCE: sina
+      DEMO_DATA: "false"
+      NEWS_HISTORY_DAYS: "7"
+    volumes:
+      - aquant_data:/app/data
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    container_name: aquant-web
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "80"
+    networks:
+      - default
+      - caddy_proxy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  aquant_data:
+
+networks:
+  caddy_proxy:
+    external: true
+    name: headscale_default
