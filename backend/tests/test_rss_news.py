@@ -38,6 +38,7 @@ def test_rss_news_maps_english_alias_and_scores_sentiment(tmp_path):
         )
         assert len(items) == 1
         assert items[0]["sentiment"] > 0.4
+        assert items[0]["event_type"] == "performance"
         assert links == [
             {
                 "news_id": items[0]["id"],

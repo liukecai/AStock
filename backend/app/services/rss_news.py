@@ -16,7 +16,7 @@ from ..config import settings
 from ..schemas import NewsEvent
 from .lake import export_parquet_snapshots
 from .news_mapping import map_text_to_stocks, sync_stock_aliases
-from .sentiment import score_text
+from .sentiment import classify_event, score_text
 
 
 def _plain_text(value: str | None) -> str:
@@ -64,6 +64,7 @@ def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
         published_at = _published_at(entry)
         text = f"{title}。{summary}"
         sentiment, keywords = score_text(text)
+        event_type, event_keywords = classify_event(text)
         item_id = _news_id(feed["name"], url, title, published_at)
         event = NewsEvent(
             id=item_id,
@@ -76,7 +77,8 @@ def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
             region=feed.get("region", "CN"),
             url=url,
             sentiment=sentiment,
-            keywords=keywords,
+            event_type=event_type,
+            keywords=list(dict.fromkeys([*keywords, *event_keywords])),
             raw_payload={"feed_path": feed["path"], "guid": entry.get("id", "")},
         )
         items.append(event.storage_row())

@@ -9,7 +9,7 @@ from .. import db
 from ..config import settings
 from ..schemas import NewsEvent
 from .lake import export_parquet_snapshots
-from .sentiment import score_text
+from .sentiment import classify_event, score_text
 
 
 def _announcement_id(url: str, symbol: str, title: str, published_at: str) -> str:
@@ -82,6 +82,7 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
             published_at = _normalize_time(item["公告时间"])
             url = str(item["公告链接"]).replace("http://", "https://", 1)
             sentiment, keywords = score_text(title)
+            event_type, event_keywords = classify_event(title)
             row_id = _announcement_id(url, symbol, title, published_at)
             event = NewsEvent(
                 id=row_id,
@@ -91,7 +92,8 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
                 source_type="announcement",
                 url=url,
                 sentiment=sentiment,
-                keywords=keywords,
+                event_type=event_type,
+                keywords=list(dict.fromkeys([*keywords, *event_keywords])),
             )
             rows_by_id[row_id] = {
                 "symbol": symbol,
@@ -140,22 +142,32 @@ def rescore_cninfo_announcements() -> dict[str, int]:
     )
     updates = []
     for item in items:
-        sentiment, keywords = score_text(f"{item['title']}。{item['summary']}")
+        text = f"{item['title']}。{item['summary']}"
+        sentiment, keywords = score_text(text)
+        event_type, event_keywords = classify_event(text)
         updates.append(
             (
                 sentiment,
-                json.dumps(keywords, ensure_ascii=False),
+                event_type,
+                json.dumps(
+                    list(dict.fromkeys([*keywords, *event_keywords])),
+                    ensure_ascii=False,
+                ),
                 item["id"],
             )
         )
     with db.connect() as conn:
         conn.executemany(
-            "UPDATE news_items SET sentiment=?, keywords=? WHERE id=?",
+            """
+            UPDATE news_items
+            SET sentiment=?, event_type=?, keywords=?
+            WHERE id=?
+            """,
             updates,
         )
         conn.executemany(
             "UPDATE news SET sentiment=?, keywords=? WHERE id=?",
-            updates,
+            [(sentiment, keywords, item_id) for sentiment, _, keywords, item_id in updates],
         )
     previous = db.row("SELECT details FROM jobs WHERE name='cninfo_update'")
     details = json.loads(previous["details"]) if previous else {}

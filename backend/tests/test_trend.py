@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 
 from app.services.scoring import build_signal, classify
-from app.services.sentiment import score_text
-from app.services.sentiment import aggregate_news
+from app.services.sentiment import aggregate_news, classify_event, score_text
 from app.services.trend import calculate_trend
 
 
@@ -66,4 +65,10 @@ def test_news_burst_uses_signal_date():
     ]
     result = aggregate_news(news, reference_date=date(2026, 6, 18))
     assert result["mentions_today"] == 2
-    assert result["burst"] == 2.0
+    assert result["burst"] == 1.8
+
+
+def test_event_classification_supports_policy_performance_and_risk():
+    assert classify_event("央行宣布降准支持实体经济")[0] == "policy"
+    assert classify_event("公司发布年报，净利润增长")[0] == "performance"
+    assert classify_event("公司收到行政处罚事先告知书")[0] == "risk"

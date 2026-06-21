@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime, timedelta
+from statistics import pstdev
 
 
 POSITIVE_WORDS = {
@@ -62,6 +63,86 @@ NEGATIVE_ENGLISH = {
     "misses expectations": -0.5,
 }
 
+EVENT_KEYWORDS = {
+    "risk": {
+        "风险",
+        "处罚",
+        "立案",
+        "问询",
+        "警示函",
+        "诉讼",
+        "冻结",
+        "违规",
+        "亏损",
+        "退市",
+        "违约",
+        "investigation",
+        "sanction",
+        "fraud",
+        "default",
+        "recall",
+    },
+    "policy": {
+        "政策",
+        "国务院",
+        "证监会",
+        "央行",
+        "发改委",
+        "财政部",
+        "监管",
+        "条例",
+        "办法",
+        "指导意见",
+        "补贴",
+        "降准",
+        "降息",
+        "关税",
+        "regulation",
+        "central bank",
+        "interest rate",
+        "tariff",
+        "subsidy",
+    },
+    "performance": {
+        "业绩",
+        "年报",
+        "半年报",
+        "季报",
+        "营收",
+        "净利润",
+        "预增",
+        "扭亏",
+        "分红",
+        "权益分派",
+        "订单",
+        "中标",
+        "earnings",
+        "revenue",
+        "profit",
+        "growth",
+        "record high",
+        "deliveries",
+        "guidance",
+        "dividend",
+        "order",
+    },
+}
+
+EVENT_PRIORITY = ("risk", "policy", "performance")
+
+
+def classify_event(text: str) -> tuple[str, list[str]]:
+    lowered = text.casefold()
+    for event_type in EVENT_PRIORITY:
+        hits = [
+            word
+            for word in EVENT_KEYWORDS[event_type]
+            if word.casefold() in lowered
+        ]
+        if hits:
+            return event_type, sorted(hits)
+    return "general", []
+
 
 def score_text(text: str) -> tuple[float, list[str]]:
     hits: list[tuple[str, float]] = []
@@ -98,7 +179,13 @@ def aggregate_news(
     news: list[dict], reference_date: date | None = None
 ) -> dict[str, float | int | list[str]]:
     if not news:
-        return {"sentiment": 0.0, "burst": 0.0, "mentions_today": 0, "keywords": []}
+        return {
+            "sentiment": 0.0,
+            "burst": 0.0,
+            "mentions_today": 0,
+            "keywords": [],
+            "event_counts": {},
+        }
 
     today = reference_date or datetime.now().date()
     today_items = [
@@ -115,15 +202,20 @@ def aggregate_news(
         )
     baseline = sum(previous_counts) / 5
     mentions = len(today_items)
-    burst = mentions / max(baseline, 1)
+    deviation = pstdev(previous_counts)
+    burst = (mentions - baseline) / max(deviation, 1.0)
     weighted = today_items or news[:10]
     sentiment = sum(float(item["sentiment"]) for item in weighted) / len(weighted)
     keywords = Counter(
         keyword for item in weighted for keyword in item.get("keywords", [])
     ).most_common(5)
+    event_counts = Counter(
+        item.get("event_type", "general") for item in weighted
+    )
     return {
         "sentiment": round(sentiment, 3),
         "burst": round(burst, 2),
         "mentions_today": mentions,
         "keywords": [word for word, _ in keywords],
+        "event_counts": dict(event_counts),
     }

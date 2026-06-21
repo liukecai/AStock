@@ -40,7 +40,7 @@ def run_signal_pipeline() -> dict[str, int | str]:
             news_rows = db.rows(
                 """
                 SELECT n.published_at, n.title, n.source, n.source_type, n.url,
-                       n.sentiment, n.keywords, l.confidence
+                       n.sentiment, n.event_type, n.keywords, l.confidence
                 FROM news_items n
                 JOIN news_stock_links l ON l.news_id=n.id
                 WHERE l.symbol=?

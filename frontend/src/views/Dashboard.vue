@@ -69,7 +69,7 @@ onMounted(load);
     <article>
       <span>舆情异动</span>
       <strong>{{ data.summary.hot_count ?? "—" }}</strong>
-      <small>Burst ≥ 3</small>
+          <small>新闻热度 Z ≥ 3</small>
     </article>
     <article class="accent">
       <span>平均评分</span>
@@ -132,4 +132,3 @@ onMounted(load);
     </div>
   </section>
 </template>
-

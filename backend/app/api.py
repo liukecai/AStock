@@ -80,7 +80,7 @@ def stock_detail(symbol: str) -> dict:
     news = db.rows(
         """
         SELECT n.published_at, n.title, n.summary, n.source, n.source_type,
-               n.language, n.region, n.url, n.sentiment, n.keywords,
+               n.language, n.region, n.url, n.sentiment, n.event_type, n.keywords,
                l.confidence, l.match_type
         FROM news_items n
         JOIN news_stock_links l ON l.news_id=n.id

@@ -95,7 +95,10 @@ watch(() => route.params.symbol, load);
               >{{ item.title }} ↗</a>
               <template v-else>{{ item.title }}</template>
             </h3>
-            <p>{{ item.source }} · {{ item.keywords.join(" / ") || "未命中情绪词" }}</p>
+            <p>
+              {{ item.source }} · {{ item.event_type }} ·
+              {{ item.keywords.join(" / ") || "未命中情绪词" }}
+            </p>
             <p v-if="item.summary" class="news-summary">{{ item.summary }}</p>
           </div>
           <span class="news-score" :class="{ positive: item.sentiment > 0, negative: item.sentiment < 0 }">
