@@ -282,3 +282,33 @@ def aggregate_news(
         "keywords": [word for word, _ in keywords],
         "event_counts": dict(event_counts),
     }
+
+
+def get_model_sentiment(text: str, lang: str = "zh") -> float | None:
+    import logging
+    from ..config import settings
+    import httpx
+    
+    logger = logging.getLogger("backend.sentiment")
+    url = f"{settings.model_service_url}/analyze"
+    try:
+        response = httpx.post(
+            url,
+            json={"text": text, "lang": lang},
+            timeout=5.0
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return float(data["sentiment"])
+        else:
+            logger.warning(
+                f"Model service returned non-200 status code: {response.status_code}. "
+                f"Response: {response.text}"
+            )
+            return None
+    except Exception as e:
+        logger.warning(
+            f"Failed to connect to model service at {url}: {e}. "
+            "Falling back to rule-based analysis."
+        )
+        return None

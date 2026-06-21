@@ -16,7 +16,7 @@ from ..config import settings
 from ..schemas import NewsEvent
 from .lake import export_parquet_snapshots
 from .news_mapping import map_text_to_stocks, sync_stock_aliases
-from .sentiment import classify_event, score_text
+from .sentiment import classify_event, score_text, get_model_sentiment
 
 
 def _plain_text(value: str | None) -> str:
@@ -63,7 +63,12 @@ def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
         url = str(entry.get("link", "")).strip()
         published_at = _published_at(entry)
         text = f"{title}。{summary}"
-        sentiment, keywords = score_text(text)
+        rule_sentiment, keywords = score_text(text)
+        
+        # Request DL sentiment model from decoupled model-service with fallback to dictionary lookup
+        model_sentiment = get_model_sentiment(text, lang=feed.get("language", "zh"))
+        sentiment = model_sentiment if model_sentiment is not None else rule_sentiment
+        
         event_type, event_keywords = classify_event(text)
         item_id = _news_id(feed["name"], url, title, published_at)
         event = NewsEvent(

@@ -61,6 +61,9 @@ class Settings:
     rsshub_base_url: str = field(
         default_factory=lambda: os.getenv("RSSHUB_BASE_URL", "http://rsshub:1200").rstrip("/")
     )
+    model_service_url: str = field(
+        default_factory=lambda: os.getenv("MODEL_SERVICE_URL", "http://model-service:8001").rstrip("/")
+    )
     rss_update_minute: int = field(
         default_factory=lambda: int(os.getenv("RSS_UPDATE_MINUTE", "15"))
     )
