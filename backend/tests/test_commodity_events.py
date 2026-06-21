@@ -153,8 +153,8 @@ def test_commodity_event_scoring_and_api(tmp_path):
             supply_recovery = client.post(
                 "/api/events/analyze",
                 json={
-                    "title": "伊拉克计划恢复原油产量并逐步增产",
-                    "summary": "原油日产量将恢复到危机前水平。",
+                    "title": "伊拉克计划推动原油产量恢复到危机前水平",
+                    "summary": "原油日产量将逐步回升。",
                     "time": "2026-06-22T12:00:00",
                 },
             )

@@ -91,7 +91,8 @@ EVENT_TYPE_KEYWORDS = {
     "supply_shock": [
         "供应中断", "减产", "停产", "断供", "供应受限", "紧张", "短缺",
         "吃紧", "供给偏紧", "库存大跌", "库存减少", "供应过剩",
-        "供给过剩", "库存激增", "增产", "扩产", "恢复产量", "提高产量",
+        "供给过剩", "库存激增", "增产", "扩产", "恢复产量", "产量恢复",
+        "提高产量",
         "需求疲弱", "需求下降", "需求萎缩", "消费低迷", "暴涨", "大涨",
         "上涨", "暴跌", "大跌", "下跌",
     ],
@@ -146,7 +147,10 @@ def identify_event_type(text: str) -> tuple[str, str] | None:
 
 def identify_commodity_shock(text: str) -> str:
     lowered = text.lower()
-    if any(kw in lowered for kw in ["恢复产量", "增产", "扩产", "提高产量"]):
+    if any(
+        kw in lowered
+        for kw in ["恢复产量", "产量恢复", "增产", "扩产", "提高产量"]
+    ):
         return "supply_increase"
     if any(kw in lowered for kw in ["需求疲弱", "需求下降", "需求萎缩", "消费低迷"]):
         return "demand_weakness"
