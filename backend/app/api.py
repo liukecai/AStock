@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api")
 
 def _decode_signal(item: dict) -> dict:
     item["metrics"] = json.loads(item["metrics"])
+    item["research_weight_pct"] = item["metrics"].get("research_weight_pct", 0)
     return item
 
 
@@ -62,6 +63,33 @@ def dashboard(limit: int = Query(20, ge=1, le=100)) -> dict:
             ),
         },
     }
+
+
+@router.get("/stocks/today")
+def stocks_today(top_n: int = Query(20, ge=1, le=100)) -> dict:
+    """Compatibility endpoint for today's ranked Top N research list."""
+
+    return dashboard(limit=top_n)
+
+
+@router.get("/signal")
+def signal(
+    symbol: str | None = Query(None, min_length=6, max_length=6),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict:
+    if symbol:
+        item = db.row(
+            """
+            SELECT s.*, st.name, st.industry
+            FROM signals s JOIN stocks st USING(symbol)
+            WHERE s.symbol=? ORDER BY s.signal_date DESC LIMIT 1
+            """,
+            (symbol,),
+        )
+        if not item:
+            raise HTTPException(status_code=404, detail="暂无该股票信号")
+        return _decode_signal(item)
+    return dashboard(limit=limit)
 
 
 @router.get("/stocks/{symbol}")

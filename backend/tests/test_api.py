@@ -25,8 +25,16 @@ def test_dashboard_and_detail_api(tmp_path):
             payload = dashboard.json()
             assert payload["summary"]["stock_count"] == 8
             assert payload["signals"]
+            assert "research_weight_pct" in payload["signals"][0]
+
+            today = client.get("/api/stocks/today?top_n=3")
+            assert today.status_code == 200
+            assert len(today.json()["signals"]) == 3
 
             symbol = payload["signals"][0]["symbol"]
+            signal = client.get(f"/api/signal?symbol={symbol}")
+            assert signal.status_code == 200
+            assert signal.json()["symbol"] == symbol
             detail = client.get(f"/api/stocks/{symbol}")
             assert detail.status_code == 200
             assert len(detail.json()["prices"]) >= 60

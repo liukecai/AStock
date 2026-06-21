@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
-from app.services.scoring import build_signal, classify
+from app.services.scoring import build_signal, classify, research_weight
 from app.services.sentiment import aggregate_news, classify_event, score_text
 from app.services.trend import calculate_trend
 
@@ -39,10 +39,29 @@ def test_announcement_negation_and_buyback_cancellation_are_neutral():
 
 def test_signal_weights_are_applied():
     trend = {"trend_score": 80, "volume_ratio": 1.0, "bullish": True}
-    news = {"sentiment": 0.5, "burst": 3.5, "mentions_today": 4, "keywords": []}
+    news = {
+        "sentiment": 0.5,
+        "burst": 3.5,
+        "mentions_today": 4,
+        "keywords": [],
+        "event_counts": {},
+    }
     signal = build_signal("000001", "2026-01-01", trend, news)
     assert signal["total_score"] == 72.5
     assert classify(True, 0.5, 3.5) == "主升浪信号"
+    assert signal["metrics"]["research_weight_pct"] == 4
+
+
+def test_research_weight_is_zero_for_avoid_and_capped_for_risk():
+    assert research_weight(90, "回避", {"sentiment": -0.5}) == 0
+    assert (
+        research_weight(
+            95,
+            "趋势股",
+            {"sentiment": 0.5, "event_counts": {"risk": 1}},
+        )
+        == 2
+    )
 
 
 def test_news_burst_uses_signal_date():

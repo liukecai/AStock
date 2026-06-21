@@ -99,7 +99,7 @@ onMounted(load);
     <div class="signal-table">
       <div class="table-head">
         <span>标的</span><span>状态</span><span>趋势</span><span>舆情</span
-        ><span>热度</span><span>综合分</span>
+        ><span>研究权重</span><span>综合分</span>
       </div>
       <RouterLink
         v-for="item in visibleSignals"
@@ -123,8 +123,8 @@ onMounted(load);
           <small>{{ item.metrics.keywords.slice(0, 2).join(" · ") || "中性" }}</small>
         </div>
         <div class="burst-cell">
-          <b>{{ item.burst.toFixed(1) }}×</b>
-          <small>{{ item.metrics.mentions_today }} 条提及</small>
+          <b>{{ item.research_weight_pct }}%</b>
+          <small>Z {{ item.burst.toFixed(1) }} · {{ item.metrics.mentions_today }} 条</small>
         </div>
         <ScoreRing :value="item.total_score" />
       </RouterLink>

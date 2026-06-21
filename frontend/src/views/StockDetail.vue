@@ -73,6 +73,7 @@ watch(() => route.params.symbol, load);
           <div><dt>20日动量</dt><dd :class="{ positive: metrics.momentum20 > 0 }">{{ (metrics.momentum20 * 100).toFixed(2) }}%</dd></div>
           <div><dt>量比</dt><dd>{{ metrics.volume_ratio }}×</dd></div>
           <div><dt>新闻热度</dt><dd>{{ data.signal?.burst }}×</dd></div>
+          <div><dt>研究权重上限</dt><dd>{{ data.signal?.research_weight_pct ?? 0 }}%</dd></div>
         </dl>
       </aside>
     </section>
