@@ -1,6 +1,6 @@
 # A-Quant Insight 系统架构与实现逻辑
 
-> 文档版本：V1.2  
+> 文档版本：V1.4  
 > 对应代码：`main` 分支  
 > 系统定位：A 股趋势、量能、公告与国内外新闻融合的轻量量化研究系统
 
@@ -104,13 +104,30 @@ flowchart LR
 
 ## 3. 部署拓扑
 
-生产环境使用 Docker Compose，包含三个应用容器：
+### 3.1 双机解耦架构（V1.4）
+
+自 V1.4 起，系统改为**双机分离部署**：
+
+| 主机 | 角色 | 配置 |
+| --- | --- | --- |
+| `ten`（云服务器） | 主服务节点，运行 API / Web / RSSHub | 低配云主机，负责调度、采集、API 和前端 |
+| `kecai-pc`（本地 PC） | 模型推理节点，运行 model-service | AMD 5900HS / 32 GB RAM，高性能本地机器 |
+
+两台机器通过 **Tailscale** 组网，`model-service` 容器在 `kecai-pc` 上以独立 Docker Compose 启动，通过 Tailscale IP 对 `ten` 上的 `aquant-api` 暴露 `:8001` 端口。
+
+### 3.2 云服务器容器（`ten`）
 
 | 容器 | 职责 | 内部端口 | 公网暴露 |
 | --- | --- | --- | --- |
 | `aquant-api` | FastAPI、调度、采集、因子计算 | `8000` | 否 |
 | `aquant-rsshub` | 将国内外站点转换为 RSS | `1200` | 否 |
 | `aquant-web` | Vue 静态页面与 Nginx API 代理 | `80` | 通过外部反向代理 |
+
+### 3.3 本地模型节点容器（`kecai-pc`）
+
+| 容器 | 职责 | 端口 | 访问方式 |
+| --- | --- | --- | --- |
+| `aquant-model-service` | FinBERT-Chinese 情绪推理（FastAPI） | `8001` | Tailscale 内网 |
 
 ```mermaid
 flowchart LR
@@ -119,6 +136,19 @@ flowchart LR
     Web --> API["aquant-api :8000"]
     API --> RSSHub["aquant-rsshub :1200"]
     API --> DB[("SQLite Volume")]
+
+    subgraph ten["ten（云服务器）"]
+        Web
+        API
+        RSSHub
+        DB
+    end
+
+    subgraph kecai_pc["kecai-pc（本地）"]
+        MS["aquant-model-service :8001"]
+    end
+
+    API -. Tailscale HTTP .-> MS
 ```
 
 设计原则：
@@ -128,7 +158,8 @@ flowchart LR
 - SQLite 文件存放在 Docker Volume；
 - 容器设置自动重启；
 - API 和 Web 均配置健康检查；
-- RSSHub 单源故障不会导致整个新闻任务失败。
+- RSSHub 单源故障不会导致整个新闻任务失败；
+- `model-service` 不可达时，`rss_news.py` 和 `sentiment.py` 自动降级为规则词典评分，不影响主流程。
 
 ## 4. 代码目录
 
@@ -144,9 +175,9 @@ AStock/
 │   │   └── services/
 │   │       ├── market.py           # AKShare 行情采集
 │   │       ├── announcements.py    # 巨潮公告采集
-│   │       ├── rss_news.py         # RSSHub 新闻采集
+│   │       ├── rss_news.py         # RSSHub 新闻采集（含模型服务集成）
 │   │       ├── news_mapping.py     # 新闻到股票映射
-│   │       ├── sentiment.py        # NLP 与舆情聚合
+│   │       ├── sentiment.py        # NLP 与舆情聚合（含模型服务调用与降级）
 │   │       ├── trend.py            # 趋势与量能因子
 │   │       ├── scoring.py          # 综合评分和分类
 │   │       ├── lake.py             # Parquet 标准快照
@@ -157,7 +188,12 @@ AStock/
 │       ├── views/Dashboard.vue     # 信号榜单
 │       ├── views/StockDetail.vue   # 个股详情
 │       └── components/PriceChart.vue
-├── docker-compose.yml
+├── model_service/                  # 独立模型推理微服务（部署于 kecai-pc）
+│   ├── app.py                      # FastAPI 应用，加载 FinBERT-Chinese
+│   ├── Dockerfile                  # CPU 优化镜像（torch-cpu）
+│   ├── requirements.txt
+│   └── docker-compose.yml          # 独立 Compose，仅用于 kecai-pc
+├── docker-compose.yml              # 主 Compose（ten 云服务器）
 └── docs/SYSTEM_ARCHITECTURE.md
 ```
 
@@ -401,9 +437,33 @@ sequenceDiagram
 
 ## 10. NLP 情绪模型
 
-当前模型是可解释的中英文金融关键词模型，不是 Transformer 或大语言模型。
+自 V1.4 起，系统采用**双层混合 NLP 情绪评分**策略：主路径通过独立的 `model-service` 微服务调用 FinBERT 中文金融模型，降级路径回退至可解释规则词典模型。两条路径输出相同格式的情绪分，对下游因子计算透明。
 
-### 10.1 单篇文本评分
+### 10.1 主路径：FinBERT-Chinese 模型服务
+
+模型：`yiyanghkust/finbert-tone-chinese`（HuggingFace 预训练中文金融 BERT）
+
+调用方式：
+
+```text
+POST http://<MODEL_SERVICE_URL>/analyze
+Body: {"text": "标题 + 摘要"}
+Response: {"label": "positive|negative|neutral", "score": 0.XX}
+```
+
+输出映射：
+
+| 模型标签 | 情绪分 |
+| --- | --- |
+| `positive` | `+score`（0~1） |
+| `negative` | `-score`（0~-1） |
+| `neutral` | `0.0` |
+
+模型服务部署于 `kecai-pc`（AMD 5900HS / 32 GB），通过 Tailscale 内网对云服务器 `ten` 开放 `:8001` 端口，配置于 `MODEL_SERVICE_URL` 环境变量。
+
+### 10.2 降级路径：规则词典评分
+
+当 `model-service` 不可达（HTTP 错误、超时或网络不通）时，`rss_news.py` 和 `sentiment.py` 自动降级为可解释的中英文金融关键词模型：
 
 ```math
 Sentiment(text) =
@@ -423,10 +483,12 @@ Sentiment(text) =
 
 - 中文正负面金融词；
 - 英文正负面金融词；
-- 分句内否定识别，例如“未被处罚”不判为利空；
-- 语义例外，例如“回购注销限制性股票”不因为“回购”判为利好。
+- 分句内否定识别，例如"未被处罚"不判为利空；
+- 语义例外，例如"回购注销限制性股票"不因为"回购"判为利好。
 
-### 10.2 事件分类
+降级期间系统日志会打印警告，新闻采集任务状态仍可标记为 `completed`（源层面失败隔离不受影响）。
+
+### 10.3 事件分类
 
 文本同时被分类为：
 
@@ -437,15 +499,13 @@ Sentiment(text) =
 
 风险优先级高于政策，政策高于业绩。事件类别及命中数量随信号指标一同保存。
 
-### 10.3 当前限制
+### 10.4 当前限制
 
-- 无上下文深度理解；
+- FinBERT 模型仅针对中文文本，英文新闻仍使用规则词典降级路径；
 - 无讽刺、比较关系和事件主体识别；
 - 英文别名覆盖有限；
 - 新闻影响方向未区分公司自身、供应商和竞争对手；
-- 情绪分没有通过历史收益监督训练。
-
-后续可在统一新闻层之上替换为 FinBERT、中文金融模型或 LLM 分类器，而不改变下游数据结构。
+- 情绪分没有通过本项目历史收益进行监督微调。
 
 ## 11. 舆情因子
 
@@ -651,9 +711,10 @@ TotalScore =
 - 任务进度和错误摘要；
 - Docker 健康检查；
 - 容器自动重启；
-- 关键业务单元与 API 测试。
-- **自动化数据库热备份**：通过 Python 内置 `connection.backup` 实现 Live 在线热备份，并在 APScheduler 调度下每日 22:00 自动执行，且自动按修改时间仅轮转保留最近的 7 份备份。
-- **任务失败通知/告警**：任务执行异常或状态被修改为 `failed` 时，自动调用告警模块，支持向 `NOTIFICATION_WEBHOOK` 环境变量指定的飞书/钉钉机器人发送告警卡片。
+- 关键业务单元与 API 测试；
+- **自动化数据库热备份**：通过 Python 内置 `connection.backup` 实现 Live 在线热备份，并在 APScheduler 调度下每日 22:00 自动执行，且自动按修改时间仅轮转保留最近的 7 份备份；
+- **任务失败通知/告警**：任务执行异常或状态被修改为 `failed` 时，自动调用告警模块，支持向 `NOTIFICATION_WEBHOOK` 环境变量指定的飞书/钉钉机器人发送告警卡片；
+- **模型服务自动降级**：`model-service` 不可达时，`rss_news.py` 和 `sentiment.py` 自动切换为规则词典评分，新闻采集任务不受影响。
 
 尚未实现：
 
@@ -661,7 +722,8 @@ TotalScore =
 - 日志集中收集；
 - 数据完整性自动校验；
 - 任务分布式锁；
-- API 身份认证和限流。
+- API 身份认证和限流；
+- `model-service` 恢复后自动重新评分历史降级新闻。
 
 ## 18. 当前生产规模
 
@@ -692,16 +754,19 @@ TotalScore =
 | `RSS_FEEDS_JSON` | 内置源列表 | 自定义 RSSHub 路由 |
 | `DEMO_DATA` | `false` | 是否使用演示数据 |
 | `ENABLE_SCHEDULER` | `true` | 是否启用调度 |
+| `MODEL_SERVICE_URL` | `http://model-service:8001` | FinBERT 模型服务地址（生产指向 kecai-pc Tailscale IP） |
+| `HF_ENDPOINT` | `https://huggingface.co` | HuggingFace 模型下载端点（国内可改为 hf-mirror.com） |
 
 ## 20. 已知技术债
 
-1. 新闻词典 NLP 能力有限；
+1. FinBERT 模型仅覆盖中文新闻，英文新闻仍依赖规则词典降级路径；
 2. 股票英文别名需要持续维护；
 3. 信号计算逐股票读取 SQLite，可进一步向量化；
 4. 每小时所有股票重算，在股票池扩大后应改为增量计算；
 5. `POST /api/pipeline/run` 暂无鉴权；
 6. SQLite 适合当前单机规模，但不适合多实例并发写入；
-7. 尚无回测和收益验证，评分权重及研究权重仍是产品假设。
+7. 尚无回测和收益验证，评分权重及研究权重仍是产品假设；
+8. `model-service` 宕机期间入库的新闻使用降级情绪分，恢复后无法自动补偿重评。
 
 ## 21. 推荐演进路线
 
@@ -715,7 +780,7 @@ TotalScore =
 
 ### 中期
 
-1. 引入中文金融情绪模型和 FinBERT；
+- [x] 1. 引入中文金融情绪模型和 FinBERT（已于 V1.4 完成：`yiyanghkust/finbert-tone-chinese`，部署于 kecai-pc）；
 2. 保存 NLP 模型版本与推理证据；
 3. 构建历史回测、交易成本和涨跌停约束；
 4. 计算因子 IC、分层收益、Sharpe 和最大回撤；
