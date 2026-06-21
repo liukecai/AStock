@@ -188,6 +188,102 @@ def run_pipeline() -> dict:
     return run_signal_pipeline()
 
 
+from pydantic import BaseModel
+
+
+class CreateLinkRequest(BaseModel):
+    news_id: str
+    symbol: str
+    confidence: float = 1.0
+    match_type: str = "manual"
+
+
+@router.get("/news-links")
+def get_news_links(
+    symbol: Annotated[str | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 50,
+) -> dict:
+    where_clauses = []
+    params = []
+    if symbol:
+        where_clauses.append("l.symbol = ?")
+        params.append(symbol)
+
+    where_str = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    offset = (page - 1) * limit
+
+    query = f"""
+        SELECT l.news_id, l.symbol, l.confidence, l.match_type,
+               n.title, n.source, n.published_at
+        FROM news_stock_links l
+        JOIN news_items n ON l.news_id = n.id
+        {where_str}
+        ORDER BY n.published_at DESC
+        LIMIT ? OFFSET ?
+    """
+    rows = db.rows(query, (*params, limit, offset))
+
+    total_query = f"""
+        SELECT COUNT(*) as count
+        FROM news_stock_links l
+        {where_str}
+    """
+    total = db.row(total_query, tuple(params))["count"]
+
+    return {
+        "links": rows,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": (total + limit - 1) // limit if total > 0 else 0
+        }
+    }
+
+
+@router.post("/news-links")
+def create_news_link(req: CreateLinkRequest) -> dict:
+    stock = db.row("SELECT symbol FROM stocks WHERE symbol=?", (req.symbol,))
+    if not stock:
+        raise HTTPException(status_code=404, detail="该股票不存在于股票池中")
+
+    news = db.row("SELECT id FROM news_items WHERE id=?", (req.news_id,))
+    if not news:
+        raise HTTPException(status_code=404, detail="新闻条目不存在")
+
+    db.upsert_news_links([{
+        "news_id": req.news_id,
+        "symbol": req.symbol,
+        "confidence": req.confidence,
+        "match_type": req.match_type
+    }])
+    return {"status": "ok"}
+
+
+@router.delete("/news-links")
+def delete_news_link(
+    news_id: Annotated[str, Query()],
+    symbol: Annotated[str, Query()]
+) -> dict:
+    with db.connect() as conn:
+        conn.execute(
+            "DELETE FROM news_stock_links WHERE news_id=? AND symbol=?",
+            (news_id, symbol)
+        )
+    return {"status": "ok"}
+
+
+@router.get("/news")
+def get_recent_news(
+    limit: Annotated[int, Query(ge=1, le=100)] = 50
+) -> list[dict]:
+    return db.rows(
+        "SELECT * FROM news_items ORDER BY published_at DESC LIMIT ?",
+        (limit,)
+    )
+
+
 @router.get("/jobs")
 def jobs() -> list[dict]:
     items = db.rows("SELECT * FROM jobs ORDER BY name")

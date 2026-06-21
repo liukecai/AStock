@@ -186,3 +186,172 @@ footer { max-width: 1240px; margin: auto; padding: 30px 24px; border-top: 1px so
   color: var(--muted);
   font-size: 11px;
 }
+
+/* Mapping Review Layout & Element Styles */
+.review-header {
+  margin-bottom: 32px;
+}
+.review-header h1 {
+  font-size: 40px;
+  margin: 5px 0 0;
+  letter-spacing: -.03em;
+  font-weight: 600;
+}
+.review-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.review-tabs button {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 14px 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.review-tabs button.active {
+  color: var(--lime);
+  border-color: var(--lime);
+}
+
+.review-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 24px;
+  margin-bottom: 32px;
+  border-radius: 6px;
+  align-items: flex-end;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.form-group label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.form-group input, .form-group select {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: 13px;
+  border-radius: 4px;
+  outline: none;
+  min-width: 180px;
+}
+.form-group input:focus, .form-group select:focus {
+  border-color: var(--lime);
+}
+.btn {
+  background: var(--lime);
+  color: #0a130f;
+  border: 0;
+  font-weight: 700;
+  padding: 10px 24px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: opacity 0.2s ease;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn:hover {
+  opacity: 0.9;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.btn-secondary:hover {
+  background: #25342e;
+}
+.btn-danger {
+  background: #ff5c5c;
+  color: #fff;
+}
+.btn-danger:hover {
+  opacity: 0.9;
+}
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 11px;
+  height: 28px;
+}
+
+.review-table {
+  border: 1px solid var(--line);
+  background: rgba(13, 24, 21, 0.4);
+}
+.review-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.2fr 1fr 1fr;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.review-row:last-child {
+  border-bottom: 0;
+}
+.review-row:hover {
+  background: rgba(200, 255, 92, 0.015);
+}
+.review-row-news h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.review-row-news p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.review-row-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.review-row-confidence {
+  font-size: 13px;
+  font-weight: 600;
+}
+.review-row-type {
+  font-size: 11px;
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+  width: max-content;
+  color: var(--muted);
+}
+.toast-msg {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--surface-2);
+  border: 1px solid var(--lime);
+  color: var(--text);
+  padding: 12px 24px;
+  border-radius: 4px;
+  font-size: 13px;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}

@@ -175,8 +175,35 @@ def score_text(text: str) -> tuple[float, list[str]]:
     return round(max(-1.0, min(1.0, score)), 3), [word for word, _ in hits]
 
 
+SOURCE_WEIGHTS = {
+    "巨潮资讯": 1.5,
+    "Bloomberg Markets": 1.2,
+    "Bloomberg Business": 1.2,
+    "Bloomberg": 1.2,
+    "财联社电报": 1.2,
+    "财联社": 1.2,
+    "华尔街见闻股市": 1.2,
+    "华尔街见闻公司": 1.2,
+    "华尔街见闻": 1.2,
+    "36氪快讯": 1.0,
+    "Al Jazeera Economy": 1.0,
+}
+
+
+def parse_published_at(val: str) -> datetime:
+    try:
+        dt = datetime.fromisoformat(val)
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return dt
+    except Exception:
+        return datetime.now()
+
+
 def aggregate_news(
-    news: list[dict], reference_date: date | None = None
+    news: list[dict],
+    reference_date: date | None = None,
+    prev_trade_dates: list[str] | None = None
 ) -> dict[str, float | int | list[str]]:
     if not news:
         return {
@@ -187,25 +214,61 @@ def aggregate_news(
             "event_counts": {},
         }
 
+    import math
     today = reference_date or datetime.now().date()
     today_items = [
         item for item in news if datetime.fromisoformat(item["published_at"]).date() == today
     ]
+
+    # Task 4: Burst Z-score baseline using trading-day sequence or fallback to natural calendar
     previous_counts = []
-    for days_ago in range(1, 6):
-        target = today - timedelta(days=days_ago)
-        previous_counts.append(
-            sum(
-                datetime.fromisoformat(item["published_at"]).date() == target
-                for item in news
+    if prev_trade_dates:
+        for t_date in prev_trade_dates:
+            target = date.fromisoformat(t_date) if isinstance(t_date, str) else t_date
+            previous_counts.append(
+                sum(
+                    datetime.fromisoformat(item["published_at"]).date() == target
+                    for item in news
+                )
             )
-        )
+    else:
+        for days_ago in range(1, 6):
+            target = today - timedelta(days=days_ago)
+            previous_counts.append(
+                sum(
+                    datetime.fromisoformat(item["published_at"]).date() == target
+                    for item in news
+                )
+            )
+
     baseline = sum(previous_counts) / 5
     mentions = len(today_items)
     deviation = pstdev(previous_counts)
     burst = (mentions - baseline) / max(deviation, 1.0)
+
+    # Task 3: News source weights and exponential time decay
     weighted = today_items or news[:10]
-    sentiment = sum(float(item["sentiment"]) for item in weighted) / len(weighted)
+    ref_datetime = datetime.combine(today, datetime.max.time())
+
+    weighted_sentiment_sum = 0.0
+    weight_total = 0.0
+
+    for item in weighted:
+        source = item.get("source", "未知")
+        source_w = SOURCE_WEIGHTS.get(source, 1.0)
+
+        pub_dt = parse_published_at(item["published_at"])
+        age_in_days = max(0.0, (ref_datetime - pub_dt).total_seconds() / 86400.0)
+        decay_w = math.exp(-0.25 * age_in_days)
+
+        confidence = float(item.get("confidence", 1.0))
+
+        w = source_w * decay_w * confidence
+        weighted_sentiment_sum += float(item.get("sentiment", 0.0)) * w
+        weight_total += w
+
+    sentiment = (weighted_sentiment_sum / weight_total) if weight_total > 0 else 0.0
+
     keywords = Counter(
         keyword for item in weighted for keyword in item.get("keywords", [])
     ).most_common(5)

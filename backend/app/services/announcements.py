@@ -36,15 +36,6 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
     db.init_db()
     history_days = history_days or settings.news_history_days
     now = datetime.now().replace(microsecond=0)
-    # Migration from the early announcement-only key, which collapsed
-    # multi-security announcements into a single row.
-    with db.connect() as conn:
-        conn.execute(
-            """
-            DELETE FROM news
-            WHERE source='巨潮资讯' AND id NOT GLOB 'cninfo:*:*'
-            """
-        )
     latest = db.row(
         "SELECT MAX(published_at) AS value FROM news_items WHERE source='巨潮资讯'"
     )
@@ -100,7 +91,38 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
                 **event.storage_row(),
             }
         rows = list(rows_by_id.values())
-        db.upsert_news(rows)
+        
+        # Write directly to news_items and news_stock_links
+        items = [
+            {
+                "id": r["id"],
+                "source": r["source"],
+                "source_type": r["source_type"],
+                "language": r["language"],
+                "region": r["region"],
+                "published_at": r["published_at"],
+                "title": r["title"],
+                "summary": r["summary"],
+                "url": r["url"],
+                "sentiment": r["sentiment"],
+                "event_type": r["event_type"],
+                "keywords": r["keywords"],
+                "raw_payload": r["raw_payload"],
+            }
+            for r in rows
+        ]
+        db.upsert_news_items(items)
+        db.upsert_news_links(
+            [
+                {
+                    "news_id": r["id"],
+                    "symbol": r["symbol"],
+                    "confidence": 1.0,
+                    "match_type": "announcement",
+                }
+                for r in rows
+            ]
+        )
         result = {
             "fetched": len(frame),
             "matched": len(rows),
@@ -164,10 +186,6 @@ def rescore_cninfo_announcements() -> dict[str, int]:
             WHERE id=?
             """,
             updates,
-        )
-        conn.executemany(
-            "UPDATE news SET sentiment=?, keywords=? WHERE id=?",
-            [(sentiment, keywords, item_id) for sentiment, _, keywords, item_id in updates],
         )
     previous = db.row("SELECT details FROM jobs WHERE name='cninfo_update'")
     details = json.loads(previous["details"]) if previous else {}

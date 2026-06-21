@@ -16,6 +16,7 @@ const route = useRoute();
       </RouterLink>
       <nav>
         <RouterLink to="/">信号台</RouterLink>
+        <RouterLink to="/review">映射审核</RouterLink>
         <a href="/docs" target="_blank">API</a>
       </nav>
       <div class="market-state">

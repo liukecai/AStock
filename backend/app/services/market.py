@@ -178,10 +178,11 @@ def update_market_data(
         started_at=started_at,
     )
 
-    def fetch(stock: dict) -> tuple[dict, list[StockBar]]:
+    def fetch(stock: dict) -> tuple[dict, list[StockBar], str]:
+        symbol = stock["symbol"]
         latest = db.row(
             "SELECT MAX(trade_date) AS value FROM daily_prices WHERE symbol=?",
-            (stock["symbol"],),
+            (symbol,),
         )
         # qfq values can change after corporate actions; refresh a rolling window.
         if latest and latest["value"]:
@@ -192,15 +193,31 @@ def update_market_data(
         else:
             start = end - timedelta(days=history_days)
         fetcher = getattr(provider, "daily_prices_with_retry", provider.daily_prices)
-        return stock, fetcher(stock["symbol"], start.isoformat(), end.isoformat())
+        bars = fetcher(symbol, start.isoformat(), end.isoformat())
+
+        # Resolve stock industry classification from database cache or CNINFO
+        existing_stock = db.row("SELECT industry FROM stocks WHERE symbol=?", (symbol,))
+        if existing_stock and existing_stock["industry"] and existing_stock["industry"] != "未分类":
+            industry = existing_stock["industry"]
+        else:
+            try:
+                df = provider._ak().stock_profile_cninfo(symbol=symbol)
+                if not df.empty and "所属行业" in df.columns:
+                    industry = str(df["所属行业"].iloc[0]).strip() or "未分类"
+                else:
+                    industry = "未分类"
+            except Exception:
+                industry = "未分类"
+
+        return stock, bars, industry
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(fetch, stock): stock for stock in targets}
         for future in as_completed(futures):
             stock = futures[future]
             try:
-                stock, bars = future.result()
-                db.upsert_stock(stock["symbol"], stock["name"])
+                stock, bars, industry = future.result()
+                db.upsert_stock(stock["symbol"], stock["name"], industry)
                 db.upsert_prices(
                     stock["symbol"], [bar.storage_row() for bar in bars]
                 )

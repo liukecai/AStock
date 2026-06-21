@@ -38,6 +38,12 @@ watch(() => route.params.symbol, load);
         <div>
           <span>综合评分</span>
           <strong>{{ data.signal.status }}</strong>
+          <small v-if="metrics.total_score_neutral !== undefined" style="display: block; font-size: 11px; margin-top: 4px; color: var(--muted)">
+            行业偏差: 
+            <span :class="{ positive: metrics.total_score_neutral > 0, negative: metrics.total_score_neutral < 0 }">
+              {{ metrics.total_score_neutral >= 0 ? '+' : '' }}{{ metrics.total_score_neutral.toFixed(2) }}
+            </span>
+          </small>
         </div>
       </div>
     </div>
@@ -59,14 +65,32 @@ watch(() => route.params.symbol, load);
         <div class="factor">
           <span>趋势强度</span><b>{{ data.signal?.trend_score ?? "—" }}</b>
           <i><i :style="{ width: `${data.signal?.trend_score || 0}%` }"></i></i>
+          <small v-if="metrics.trend_score_neutral !== undefined" style="font-size: 10px; color: var(--muted); margin-top: 4px; grid-column: 1 / -1">
+            行业偏差: 
+            <span :class="{ positive: metrics.trend_score_neutral > 0, negative: metrics.trend_score_neutral < 0 }">
+              {{ metrics.trend_score_neutral >= 0 ? '+' : '' }}{{ metrics.trend_score_neutral.toFixed(2) }}
+            </span>
+          </small>
         </div>
         <div class="factor">
           <span>舆情得分</span><b>{{ data.signal?.sentiment_score ?? "—" }}</b>
           <i><i :style="{ width: `${data.signal?.sentiment_score || 0}%` }"></i></i>
+          <small v-if="metrics.sentiment_score_neutral !== undefined" style="font-size: 10px; color: var(--muted); margin-top: 4px; grid-column: 1 / -1">
+            行业偏差: 
+            <span :class="{ positive: metrics.sentiment_score_neutral > 0, negative: metrics.sentiment_score_neutral < 0 }">
+              {{ metrics.sentiment_score_neutral >= 0 ? '+' : '' }}{{ metrics.sentiment_score_neutral.toFixed(2) }}
+            </span>
+          </small>
         </div>
         <div class="factor">
           <span>量能得分</span><b>{{ data.signal?.volume_score ?? "—" }}</b>
           <i><i :style="{ width: `${data.signal?.volume_score || 0}%` }"></i></i>
+          <small v-if="metrics.volume_score_neutral !== undefined" style="font-size: 10px; color: var(--muted); margin-top: 4px; grid-column: 1 / -1">
+            行业偏差: 
+            <span :class="{ positive: metrics.volume_score_neutral > 0, negative: metrics.volume_score_neutral < 0 }">
+              {{ metrics.volume_score_neutral >= 0 ? '+' : '' }}{{ metrics.volume_score_neutral.toFixed(2) }}
+            </span>
+          </small>
         </div>
         <dl>
           <div><dt>MA 5 / 20 / 60</dt><dd>{{ metrics.ma5 }} / {{ metrics.ma20 }} / {{ metrics.ma60 }}</dd></div>

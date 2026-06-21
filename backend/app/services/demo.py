@@ -64,22 +64,38 @@ def seed_demo_data(force: bool = False) -> None:
             )
         db.upsert_prices(symbol, prices)
 
-        news_rows = []
+        news_items = []
+        news_links = []
         for index in range(8):
             template = NEWS_TEMPLATES[(index + seed) % len(NEWS_TEMPLATES)]
             title = template.format(name)
             sentiment, keywords = score_text(title)
             published = datetime.now() - timedelta(days=index % 6, hours=index)
-            news_rows.append(
+            news_id = hashlib.sha1(f"{symbol}-{title}-{index}".encode()).hexdigest()
+            news_items.append(
                 {
-                    "id": hashlib.sha1(f"{symbol}-{title}-{index}".encode()).hexdigest(),
-                    "symbol": symbol,
+                    "id": news_id,
+                    "source": "演示数据",
+                    "source_type": "legacy",
+                    "language": "zh",
+                    "region": "CN",
                     "published_at": published.replace(microsecond=0).isoformat(),
                     "title": title,
-                    "source": "演示数据",
+                    "summary": "",
                     "url": "",
                     "sentiment": sentiment,
+                    "event_type": "general",
                     "keywords": __import__("json").dumps(keywords, ensure_ascii=False),
+                    "raw_payload": "{}",
                 }
             )
-        db.upsert_news(news_rows)
+            news_links.append(
+                {
+                    "news_id": news_id,
+                    "symbol": symbol,
+                    "confidence": 1.0,
+                    "match_type": "legacy",
+                }
+            )
+        db.upsert_news_items(news_items)
+        db.upsert_news_links(news_links)

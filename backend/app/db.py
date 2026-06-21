@@ -33,20 +33,6 @@ CREATE TABLE IF NOT EXISTS daily_prices (
 CREATE INDEX IF NOT EXISTS idx_prices_symbol_date
 ON daily_prices(symbol, trade_date DESC);
 
-CREATE TABLE IF NOT EXISTS news (
-    id TEXT PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    published_at TEXT NOT NULL,
-    title TEXT NOT NULL,
-    source TEXT NOT NULL,
-    url TEXT,
-    sentiment REAL NOT NULL DEFAULT 0,
-    keywords TEXT NOT NULL DEFAULT '[]'
-);
-
-CREATE INDEX IF NOT EXISTS idx_news_symbol_date
-ON news(symbol, published_at DESC);
-
 CREATE TABLE IF NOT EXISTS news_items (
     id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
@@ -149,25 +135,32 @@ def init_db() -> None:
                 "ALTER TABLE news_items ADD COLUMN event_type TEXT NOT NULL DEFAULT 'general'"
             )
         conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO news_items(
-              id, source, source_type, language, region, published_at, title,
-              summary, url, sentiment, keywords, raw_payload, created_at
+        # Migration from the old news table to the unified news data layer if it exists
+        old_table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='news'"
+        ).fetchone()
+        if old_table_exists:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO news_items(
+                  id, source, source_type, language, region, published_at, title,
+                  summary, url, sentiment, keywords, raw_payload, created_at
+                )
+                SELECT id, source,
+                  CASE WHEN source='巨潮资讯' THEN 'announcement' ELSE 'legacy' END,
+                  'zh', 'CN', published_at, title, '', url, sentiment, keywords,
+                  '{}', datetime('now')
+                FROM news
+                """
             )
-            SELECT id, source,
-              CASE WHEN source='巨潮资讯' THEN 'announcement' ELSE 'legacy' END,
-              'zh', 'CN', published_at, title, '', url, sentiment, keywords,
-              '{}', datetime('now')
-            FROM news
-            """
-        )
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO news_stock_links(news_id, symbol, confidence, match_type)
-            SELECT id, symbol, 1, 'legacy' FROM news
-            """
-        )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO news_stock_links(news_id, symbol, confidence, match_type)
+                SELECT id, symbol, 1, 'legacy' FROM news
+                """
+            )
+            conn.execute("DROP TABLE IF EXISTS news")
+            conn.execute("DROP INDEX IF EXISTS idx_news_symbol_date")
 
 
 def upsert_stock(symbol: str, name: str, industry: str = "未分类") -> None:
@@ -199,54 +192,6 @@ def upsert_prices(symbol: str, rows: list[dict[str, Any]]) -> None:
             """,
             [{"symbol": symbol, "amount": 0, **row} for row in rows],
         )
-
-
-def upsert_news(rows: list[dict[str, Any]]) -> None:
-    if not rows:
-        return
-    with connect() as conn:
-        conn.executemany(
-            """
-            INSERT INTO news(id, symbol, published_at, title, source, url, sentiment, keywords)
-            VALUES (:id, :symbol, :published_at, :title, :source, :url, :sentiment, :keywords)
-            ON CONFLICT(id) DO UPDATE SET
-              title=excluded.title, url=excluded.url, sentiment=excluded.sentiment,
-              keywords=excluded.keywords
-            """,
-            rows,
-        )
-    items = [
-        {
-            "id": item["id"],
-            "source": item["source"],
-            "source_type": "announcement"
-            if item["source"] == "巨潮资讯"
-            else "legacy",
-            "language": "zh",
-            "region": "CN",
-            "published_at": item["published_at"],
-            "title": item["title"],
-            "summary": "",
-            "url": item.get("url", ""),
-            "sentiment": item["sentiment"],
-            "event_type": item.get("event_type", "general"),
-            "keywords": item["keywords"],
-            "raw_payload": "{}",
-        }
-        for item in rows
-    ]
-    upsert_news_items(items)
-    upsert_news_links(
-        [
-            {
-                "news_id": item["id"],
-                "symbol": item["symbol"],
-                "confidence": 1.0,
-                "match_type": "announcement",
-            }
-            for item in rows
-        ]
-    )
 
 
 def upsert_news_items(rows: list[dict[str, Any]]) -> None:
@@ -382,6 +327,13 @@ def update_job(
                 json.dumps(details or {}, ensure_ascii=False),
             ),
         )
+    if status == "failed":
+        try:
+            from .services.notifications import send_failure_notification
+            send_failure_notification(name, message)
+        except Exception as e:
+            import sys
+            print(f"Failed to trigger failure notification inside update_job: {e}", file=sys.stderr)
 
 
 def rows(query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:

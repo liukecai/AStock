@@ -16,7 +16,26 @@ from .services.market import update_market_data
 from .services.pipeline import run_signal_pipeline
 from .services.rss_news import update_rss_news
 
+from apscheduler.events import EVENT_JOB_ERROR
+from .services.backup import backup_db
+
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+
+
+def job_error_listener(event):
+    if event.exception:
+        try:
+            from .services.notifications import send_failure_notification
+            send_failure_notification(
+                job_name=event.job_id or "unknown_scheduler_job",
+                error_message=str(event.exception)
+            )
+        except Exception as e:
+            import sys
+            print(f"Error in scheduler error listener: {e}", file=sys.stderr)
+
+
+scheduler.add_listener(job_error_listener, EVENT_JOB_ERROR)
 
 
 def refresh_all() -> None:
@@ -86,6 +105,15 @@ async def lifespan(_: FastAPI):
             hour=settings.news_update_hour,
             minute=min(settings.news_update_minute + 15, 59),
             id="nightly-news-signals",
+            replace_existing=True,
+            max_instances=1,
+        )
+        scheduler.add_job(
+            backup_db,
+            "cron",
+            hour="22",
+            minute="0",
+            id="daily-db-backup",
             replace_existing=True,
             max_instances=1,
         )
