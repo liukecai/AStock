@@ -12,6 +12,13 @@ def _as_bool(value: str | None, default: bool = False) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def _json_env(name: str) -> object | None:
+    value = os.getenv(name)
+    if not value or not value.strip():
+        return None
+    return json.loads(value)
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "A-Quant Insight"
@@ -80,7 +87,7 @@ class Settings:
     )
     rss_feeds: tuple[dict, ...] = field(
         default_factory=lambda: tuple(
-            json.loads(os.getenv("RSS_FEEDS_JSON", "null"))
+            _json_env("RSS_FEEDS_JSON")
             or [
                 {"name": "财联社电报", "path": "/cls/telegraph", "language": "zh", "region": "CN"},
                 {"name": "华尔街见闻股市", "path": "/wallstreetcn/news/shares", "language": "zh", "region": "CN"},
