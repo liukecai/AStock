@@ -20,6 +20,17 @@ class Settings:
         default_factory=lambda: Path(os.getenv("DATABASE_PATH", "./data/aquant.db"))
     )
     data_dir: Path = field(default_factory=lambda: Path(os.getenv("DATA_DIR", "./data")))
+    calibration_path: Path = field(
+        default_factory=lambda: Path(
+            os.getenv(
+                "CALIBRATION_PATH",
+                str(
+                    Path(os.getenv("DATA_DIR", "./data"))
+                    / "research_calibration.json"
+                ),
+            )
+        )
+    )
     enable_parquet_snapshots: bool = field(
         default_factory=lambda: _as_bool(
             os.getenv("ENABLE_PARQUET_SNAPSHOTS"), True

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .config import settings
 from .services.backtest import BacktestConfig, run_backtest_from_parquet
+from .services.calibration import calibrate_from_backtest, save_calibration
 from .services.announcements import (
     rescore_cninfo_announcements,
     update_cninfo_announcements,
@@ -29,6 +30,7 @@ def main() -> None:
             "rescore-news",
             "run",
             "backtest",
+            "calibrate",
         ],
     )
     parser.add_argument("--force", action="store_true")
@@ -56,17 +58,27 @@ def main() -> None:
         print(update_rss_news())
     elif args.command == "rescore-news":
         print(rescore_cninfo_announcements())
-    elif args.command == "backtest":
+    elif args.command in {"backtest", "calibrate"}:
         parquet_root = Path(settings.data_dir) / "parquet"
+        output_dir = Path(args.output_dir or Path(settings.data_dir) / "backtest")
         result = run_backtest_from_parquet(
             parquet_root / "factors/signals.parquet",
             parquet_root / "market/daily_prices.parquet",
-            Path(args.output_dir or Path(settings.data_dir) / "backtest"),
+            output_dir,
             BacktestConfig(
                 holding_period=args.holding_period,
                 transaction_cost_bps=args.transaction_cost_bps,
             ),
         )
+        if args.command == "calibrate":
+            import pandas as pd
+
+            calibration = calibrate_from_backtest(
+                result,
+                pd.read_parquet(output_dir / "trades.parquet"),
+            )
+            save_calibration(calibration, settings.calibration_path)
+            result["calibration"] = calibration
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     elif args.command == "run":
         print(run_signal_pipeline())
