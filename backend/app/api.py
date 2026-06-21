@@ -10,10 +10,30 @@ from .services.pipeline import run_signal_pipeline
 
 router = APIRouter(prefix="/api")
 
+MARKET_BOARD_SQL = {
+    "沪A": "s.symbol GLOB '60[0135]*'",
+    "深A": "s.symbol GLOB '00[0123]*'",
+    "创业板": "s.symbol GLOB '30[01]*'",
+    "科创板": "s.symbol GLOB '68[89]*'",
+}
+
+
+def _market_board(symbol: str) -> str:
+    if symbol.startswith(("688", "689")):
+        return "科创板"
+    if symbol.startswith(("300", "301")):
+        return "创业板"
+    if symbol.startswith(("000", "001", "002", "003")):
+        return "深A"
+    if symbol.startswith(("600", "601", "603", "605")):
+        return "沪A"
+    return "其他"
+
 
 def _decode_signal(item: dict) -> dict:
     item["metrics"] = json.loads(item["metrics"])
     item["research_weight_pct"] = item["metrics"].get("research_weight_pct", 0)
+    item["market_board"] = _market_board(item["symbol"])
     return item
 
 
@@ -39,6 +59,7 @@ def health() -> dict:
 @router.get("/dashboard")
 def dashboard(
     status: Annotated[str | None, Query()] = None,
+    board: Annotated[str | None, Query()] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=10000)] = 100,
 ) -> dict:
@@ -76,14 +97,20 @@ def dashboard(
     if status and status != "全部":
         where_clause += " AND s.status=?"
         params.append(status)
+    if board and board != "全部":
+        board_clause = MARKET_BOARD_SQL.get(board)
+        if not board_clause:
+            raise HTTPException(status_code=422, detail="不支持的板块筛选")
+        where_clause += f" AND {board_clause}"
 
-    if status and status != "全部":
-        total_filtered = db.row(
-            "SELECT COUNT(*) AS count FROM signals WHERE signal_date=? AND status=?",
-            (signal_date, status),
-        )["count"]
-    else:
-        total_filtered = total_universe
+    total_filtered = db.row(
+        f"""
+        SELECT COUNT(*) AS count
+        FROM signals s
+        {where_clause}
+        """,
+        tuple(params),
+    )["count"]
 
     offset = (page - 1) * limit
     items = db.rows(

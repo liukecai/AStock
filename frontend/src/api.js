@@ -10,8 +10,10 @@ async function request(path, options) {
 }
 
 export const api = {
-  dashboard: (page = 1, limit = 50, status = "全部") =>
-    request(`/dashboard?page=${page}&limit=${limit}&status=${encodeURIComponent(status)}`),
+  dashboard: (page = 1, limit = 50, status = "全部", board = "全部") =>
+    request(
+      `/dashboard?page=${page}&limit=${limit}&status=${encodeURIComponent(status)}&board=${encodeURIComponent(board)}`
+    ),
   stock: (symbol) => request(`/stocks/${symbol}`),
   runPipeline: () => request("/pipeline/run", { method: "POST" }),
   getNewsLinks: (page = 1, limit = 50, symbol = "") => {
@@ -31,4 +33,3 @@ export const api = {
     }),
   getRecentNews: (limit = 50) => request(`/news?limit=${limit}`),
 };
-
