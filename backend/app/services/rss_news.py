@@ -13,6 +13,8 @@ import httpx
 
 from .. import db
 from ..config import settings
+from ..schemas import NewsEvent
+from .lake import export_parquet_snapshots
 from .news_mapping import map_text_to_stocks, sync_stock_aliases
 from .sentiment import score_text
 
@@ -63,25 +65,21 @@ def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
         text = f"{title}。{summary}"
         sentiment, keywords = score_text(text)
         item_id = _news_id(feed["name"], url, title, published_at)
-        items.append(
-            {
-                "id": item_id,
-                "source": feed["name"],
-                "source_type": "rss",
-                "language": feed.get("language", "zh"),
-                "region": feed.get("region", "CN"),
-                "published_at": published_at,
-                "title": title,
-                "summary": summary[:4000],
-                "url": url,
-                "sentiment": sentiment,
-                "keywords": json.dumps(keywords, ensure_ascii=False),
-                "raw_payload": json.dumps(
-                    {"feed_path": feed["path"], "guid": entry.get("id", "")},
-                    ensure_ascii=False,
-                ),
-            }
+        event = NewsEvent(
+            id=item_id,
+            time=published_at,
+            title=title,
+            summary=summary[:4000],
+            source=feed["name"],
+            source_type="rss",
+            language=feed.get("language", "zh"),
+            region=feed.get("region", "CN"),
+            url=url,
+            sentiment=sentiment,
+            keywords=keywords,
+            raw_payload={"feed_path": feed["path"], "guid": entry.get("id", "")},
         )
+        items.append(event.storage_row())
         matches = {
             match.symbol: match
             for match in map_text_to_stocks(summary, context="body")
@@ -146,6 +144,12 @@ def update_rss_news() -> dict:
 
     status = "completed" if totals["succeeded"] else "failed"
     details = {**totals, "errors": errors}
+    details["parquet"] = export_parquet_snapshots(
+        (
+            "news/news_events.parquet",
+            "news/news_stock_links.parquet",
+        )
+    )
     db.update_job(
         "rss_news_update",
         status,

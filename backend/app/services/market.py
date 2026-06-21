@@ -8,12 +8,16 @@ from typing import Protocol
 
 from .. import db
 from ..config import settings
+from ..schemas import StockBar
+from .lake import export_parquet_snapshots
 
 
 class MarketProvider(Protocol):
     def stock_list(self) -> list[dict]: ...
 
-    def daily_prices(self, symbol: str, start_date: str, end_date: str) -> list[dict]: ...
+    def daily_prices(
+        self, symbol: str, start_date: str, end_date: str
+    ) -> list[StockBar]: ...
 
 
 @dataclass
@@ -57,7 +61,9 @@ class AkshareProvider:
             for _, row in frame.iterrows()
         ]
 
-    def daily_prices(self, symbol: str, start_date: str, end_date: str) -> list[dict]:
+    def daily_prices(
+        self, symbol: str, start_date: str, end_date: str
+    ) -> list[StockBar]:
         ak = self._ak()
         if self.source == "eastmoney":
             frame = ak.stock_zh_a_hist(
@@ -87,26 +93,29 @@ class AkshareProvider:
                 "最高": "high",
                 "最低": "low",
                 "成交量": "volume",
+                "成交额": "amount",
                 "date": "trade_date",
             }
         )
         return [
-            {
-                "trade_date": row["trade_date"].isoformat()
+            StockBar(
+                code=symbol,
+                date=row["trade_date"].isoformat()
                 if hasattr(row["trade_date"], "isoformat")
                 else str(row["trade_date"]),
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": float(row["volume"]),
-            }
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=float(row["volume"]),
+                amount=float(row.get("amount", 0) or 0),
+            )
             for _, row in frame.iterrows()
         ]
 
     def daily_prices_with_retry(
         self, symbol: str, start_date: str, end_date: str, retries: int = 3
-    ) -> list[dict]:
+    ) -> list[StockBar]:
         last_error: Exception | None = None
         for attempt in range(retries):
             try:
@@ -165,7 +174,7 @@ def update_market_data(
         started_at=started_at,
     )
 
-    def fetch(stock: dict) -> tuple[dict, list[dict]]:
+    def fetch(stock: dict) -> tuple[dict, list[StockBar]]:
         latest = db.row(
             "SELECT MAX(trade_date) AS value FROM daily_prices WHERE symbol=?",
             (stock["symbol"],),
@@ -186,9 +195,11 @@ def update_market_data(
         for future in as_completed(futures):
             stock = futures[future]
             try:
-                stock, price_rows = future.result()
+                stock, bars = future.result()
                 db.upsert_stock(stock["symbol"], stock["name"])
-                db.upsert_prices(stock["symbol"], price_rows)
+                db.upsert_prices(
+                    stock["symbol"], [bar.storage_row() for bar in bars]
+                )
                 updated += 1
             except Exception as exc:
                 failed += 1
@@ -221,5 +232,8 @@ def update_market_data(
         details={**result, "errors": errors},
         started_at=started_at,
         finished_at=datetime.now().replace(microsecond=0).isoformat(),
+    )
+    result["parquet"] = export_parquet_snapshots(
+        ("market/daily_prices.parquet",)
     )
     return result

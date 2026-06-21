@@ -20,6 +20,11 @@ class Settings:
         default_factory=lambda: Path(os.getenv("DATABASE_PATH", "./data/aquant.db"))
     )
     data_dir: Path = field(default_factory=lambda: Path(os.getenv("DATA_DIR", "./data")))
+    enable_parquet_snapshots: bool = field(
+        default_factory=lambda: _as_bool(
+            os.getenv("ENABLE_PARQUET_SNAPSHOTS"), True
+        )
+    )
     cors_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             origin.strip()

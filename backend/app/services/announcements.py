@@ -7,6 +7,8 @@ from urllib.parse import parse_qs, urlparse
 
 from .. import db
 from ..config import settings
+from ..schemas import NewsEvent
+from .lake import export_parquet_snapshots
 from .sentiment import score_text
 
 
@@ -81,15 +83,19 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
             url = str(item["公告链接"]).replace("http://", "https://", 1)
             sentiment, keywords = score_text(title)
             row_id = _announcement_id(url, symbol, title, published_at)
+            event = NewsEvent(
+                id=row_id,
+                time=published_at,
+                title=title,
+                source="巨潮资讯",
+                source_type="announcement",
+                url=url,
+                sentiment=sentiment,
+                keywords=keywords,
+            )
             rows_by_id[row_id] = {
-                "id": row_id,
                 "symbol": symbol,
-                "published_at": published_at,
-                "title": title,
-                "source": "巨潮资讯",
-                "url": url,
-                "sentiment": sentiment,
-                "keywords": json.dumps(keywords, ensure_ascii=False),
+                **event.storage_row(),
             }
         rows = list(rows_by_id.values())
         db.upsert_news(rows)
@@ -99,6 +105,12 @@ def update_cninfo_announcements(history_days: int | None = None) -> dict:
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
         }
+        result["parquet"] = export_parquet_snapshots(
+            (
+                "news/news_events.parquet",
+                "news/news_stock_links.parquet",
+            )
+        )
         db.update_job(
             "cninfo_update",
             "completed",

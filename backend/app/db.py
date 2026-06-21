@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS daily_prices (
     low REAL NOT NULL,
     close REAL NOT NULL,
     volume REAL NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (symbol, trade_date)
 );
 
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS news_items (
     summary TEXT NOT NULL DEFAULT '',
     url TEXT,
     sentiment REAL NOT NULL DEFAULT 0,
+    event_type TEXT NOT NULL DEFAULT 'general',
     keywords TEXT NOT NULL DEFAULT '[]',
     raw_payload TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
@@ -132,6 +134,20 @@ def connect() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        price_columns = {
+            item["name"] for item in conn.execute("PRAGMA table_info(daily_prices)")
+        }
+        if "amount" not in price_columns:
+            conn.execute(
+                "ALTER TABLE daily_prices ADD COLUMN amount REAL NOT NULL DEFAULT 0"
+            )
+        news_columns = {
+            item["name"] for item in conn.execute("PRAGMA table_info(news_items)")
+        }
+        if "event_type" not in news_columns:
+            conn.execute(
+                "ALTER TABLE news_items ADD COLUMN event_type TEXT NOT NULL DEFAULT 'general'"
+            )
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute(
             """
@@ -171,13 +187,17 @@ def upsert_prices(symbol: str, rows: list[dict[str, Any]]) -> None:
     with connect() as conn:
         conn.executemany(
             """
-            INSERT INTO daily_prices(symbol, trade_date, open, high, low, close, volume)
-            VALUES (:symbol, :trade_date, :open, :high, :low, :close, :volume)
+            INSERT INTO daily_prices(
+              symbol, trade_date, open, high, low, close, volume, amount
+            )
+            VALUES (
+              :symbol, :trade_date, :open, :high, :low, :close, :volume, :amount
+            )
             ON CONFLICT(symbol, trade_date) DO UPDATE SET
               open=excluded.open, high=excluded.high, low=excluded.low,
-              close=excluded.close, volume=excluded.volume
+              close=excluded.close, volume=excluded.volume, amount=excluded.amount
             """,
-            [{"symbol": symbol, **row} for row in rows],
+            [{"symbol": symbol, "amount": 0, **row} for row in rows],
         )
 
 
@@ -209,6 +229,7 @@ def upsert_news(rows: list[dict[str, Any]]) -> None:
             "summary": "",
             "url": item.get("url", ""),
             "sentiment": item["sentiment"],
+            "event_type": item.get("event_type", "general"),
             "keywords": item["keywords"],
             "raw_payload": "{}",
         }
@@ -237,18 +258,27 @@ def upsert_news_items(rows: list[dict[str, Any]]) -> None:
             """
             INSERT INTO news_items(
               id, source, source_type, language, region, published_at, title,
-              summary, url, sentiment, keywords, raw_payload, created_at
+              summary, url, sentiment, event_type, keywords, raw_payload, created_at
             ) VALUES (
               :id, :source, :source_type, :language, :region, :published_at, :title,
-              :summary, :url, :sentiment, :keywords, :raw_payload, :created_at
+              :summary, :url, :sentiment, :event_type, :keywords, :raw_payload,
+              :created_at
             )
             ON CONFLICT(id) DO UPDATE SET
               source=excluded.source, published_at=excluded.published_at,
               title=excluded.title, summary=excluded.summary, url=excluded.url,
-              sentiment=excluded.sentiment, keywords=excluded.keywords,
+              sentiment=excluded.sentiment, event_type=excluded.event_type,
+              keywords=excluded.keywords,
               raw_payload=excluded.raw_payload
             """,
-            [{**item, "created_at": item.get("created_at", now)} for item in rows],
+            [
+                {
+                    **item,
+                    "event_type": item.get("event_type", "general"),
+                    "created_at": item.get("created_at", now),
+                }
+                for item in rows
+            ],
         )
 
 

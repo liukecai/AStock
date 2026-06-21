@@ -71,7 +71,7 @@ def stock_detail(symbol: str) -> dict:
         raise HTTPException(status_code=404, detail="股票不存在")
     prices = db.rows(
         """
-        SELECT trade_date, open, high, low, close, volume
+        SELECT trade_date, open, high, low, close, volume, amount
         FROM daily_prices WHERE symbol=? ORDER BY trade_date DESC LIMIT 120
         """,
         (symbol,),

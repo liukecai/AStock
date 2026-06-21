@@ -9,6 +9,7 @@ from .. import db
 from .scoring import build_signal
 from .sentiment import aggregate_news
 from .trend import calculate_trend
+from .lake import export_parquet_snapshots
 
 
 def run_signal_pipeline() -> dict[str, int | str]:
@@ -29,7 +30,7 @@ def run_signal_pipeline() -> dict[str, int | str]:
         symbol = item["symbol"]
         price_rows = db.rows(
             """
-            SELECT trade_date, open, high, low, close, volume
+            SELECT trade_date, open, high, low, close, volume, amount
             FROM daily_prices WHERE symbol=? ORDER BY trade_date DESC LIMIT 160
             """,
             (symbol,),
@@ -77,5 +78,8 @@ def run_signal_pipeline() -> dict[str, int | str]:
         details=result,
         started_at=started_at,
         finished_at=datetime.now().replace(microsecond=0).isoformat(),
+    )
+    result["parquet"] = export_parquet_snapshots(
+        ("factors/signals.parquet",)
     )
     return result

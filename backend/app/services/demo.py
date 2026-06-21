@@ -59,6 +59,7 @@ def seed_demo_data(force: bool = False) -> None:
                     "low": round(float(min(open_price, close) * (1 - rng.uniform(0, 0.012))), 3),
                     "close": round(float(close), 3),
                     "volume": round(float(volumes[index]), 0),
+                    "amount": round(float(volumes[index] * close), 2),
                 }
             )
         db.upsert_prices(symbol, prices)
@@ -82,4 +83,3 @@ def seed_demo_data(force: bool = False) -> None:
                 }
             )
         db.upsert_news(news_rows)
-
