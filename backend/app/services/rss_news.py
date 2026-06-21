@@ -82,7 +82,13 @@ def parse_feed(payload: bytes, feed: dict) -> tuple[list[dict], list[dict]]:
                 ),
             }
         )
-        for match in map_text_to_stocks(text):
+        matches = {
+            match.symbol: match
+            for match in map_text_to_stocks(summary, context="body")
+        }
+        for match in map_text_to_stocks(title, context="title"):
+            matches[match.symbol] = match
+        for match in matches.values():
             links.append(
                 {
                     "news_id": item_id,
@@ -121,7 +127,7 @@ def update_rss_news() -> dict:
                 response.raise_for_status()
                 items, links = parse_feed(response.content, feed)
                 db.upsert_news_items(items)
-                db.upsert_news_links(links)
+                db.replace_news_links([item["id"] for item in items], links)
                 totals["succeeded"] += 1
                 totals["items"] += len(items)
                 totals["links"] += len(links)
@@ -154,4 +160,3 @@ def update_rss_news() -> dict:
         finished_at=datetime.now().replace(microsecond=0).isoformat(),
     )
     return details
-

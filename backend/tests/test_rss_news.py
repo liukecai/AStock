@@ -43,7 +43,7 @@ def test_rss_news_maps_english_alias_and_scores_sentiment(tmp_path):
                 "news_id": items[0]["id"],
                 "symbol": "002594",
                 "confidence": 0.95,
-                "match_type": "alias:BYD",
+                "match_type": "alias_title:BYD",
             }
         ]
     finally:
@@ -61,5 +61,18 @@ def test_stock_code_mapping(tmp_path):
         assert matches[0].symbol == "300750"
         assert matches[0].confidence == 1.0
         assert matches[0].match_type == "symbol"
+    finally:
+        object.__setattr__(settings, "database_path", original_path)
+
+
+def test_generic_stock_name_does_not_match_generic_news(tmp_path):
+    original_path = settings.database_path
+    object.__setattr__(settings, "database_path", tmp_path / "generic.db")
+    try:
+        db.init_db()
+        db.upsert_stock("300024", "机器人", "机械设备")
+        sync_stock_aliases()
+        assert map_text_to_stocks("Figure 机器人数超过人类员工", context="title") == []
+        assert map_text_to_stocks("AI 产业正在增加机器人投资", context="body") == []
     finally:
         object.__setattr__(settings, "database_path", original_path)

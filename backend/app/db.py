@@ -268,6 +268,27 @@ def upsert_news_links(rows: list[dict[str, Any]]) -> None:
         )
 
 
+def replace_news_links(news_ids: list[str], rows: list[dict[str, Any]]) -> None:
+    if not news_ids:
+        return
+    with connect() as conn:
+        placeholders = ",".join("?" for _ in news_ids)
+        conn.execute(
+            f"DELETE FROM news_stock_links WHERE news_id IN ({placeholders})",
+            tuple(news_ids),
+        )
+        if rows:
+            conn.executemany(
+                """
+                INSERT INTO news_stock_links(news_id, symbol, confidence, match_type)
+                VALUES (:news_id, :symbol, :confidence, :match_type)
+                ON CONFLICT(news_id, symbol) DO UPDATE SET
+                  confidence=excluded.confidence, match_type=excluded.match_type
+                """,
+                rows,
+            )
+
+
 def save_signal(signal: dict[str, Any]) -> None:
     payload = {**signal, "metrics": json.dumps(signal["metrics"], ensure_ascii=False)}
     with connect() as conn:

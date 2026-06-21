@@ -17,6 +17,15 @@ CURATED_ALIASES = {
     "CMB": "600036",
     "Wuliangye": "000858",
 }
+GENERIC_ALIASES = {
+    "机器人",
+    "中国电影",
+    "人民网",
+    "新华网",
+    "中信证券",
+    "招商证券",
+    "广发证券",
+}
 
 NAME_SUFFIXES = (
     "股份有限公司",
@@ -70,7 +79,9 @@ def sync_stock_aliases() -> int:
     return len(rows)
 
 
-def map_text_to_stocks(text: str, max_matches: int = 12) -> list[StockMatch]:
+def map_text_to_stocks(
+    text: str, max_matches: int = 12, context: str = "body"
+) -> list[StockMatch]:
     if not text:
         return []
     aliases = db.rows(
@@ -84,12 +95,28 @@ def map_text_to_stocks(text: str, max_matches: int = 12) -> list[StockMatch]:
     matches: dict[str, StockMatch] = {}
     for item in aliases:
         alias = item["alias"]
-        if alias.casefold() not in lowered:
+        alias_lower = alias.casefold()
+        if alias in GENERIC_ALIASES:
             continue
+        if alias_lower not in lowered:
+            continue
+        is_english = item["language"] == "en"
+        if is_english:
+            if not re.search(
+                rf"(?<![a-z0-9]){re.escape(alias_lower)}(?![a-z0-9])",
+                lowered,
+            ):
+                continue
+        elif context == "body" and len(alias) < 5:
+            continue
+        elif context == "title" and len(alias) < 4:
+            title_pattern = rf"^(?:\*?ST)?{re.escape(alias)}(?:[:：\s（(]|$)"
+            if not re.search(title_pattern, text, flags=re.IGNORECASE):
+                continue
         candidate = StockMatch(
             symbol=item["symbol"],
-            confidence=float(item["confidence"]),
-            match_type="alias",
+            confidence=float(item["confidence"]) * (1.0 if context == "title" else 0.8),
+            match_type=f"alias_{context}",
             alias=alias,
         )
         existing = matches.get(candidate.symbol)
@@ -106,4 +133,3 @@ def map_text_to_stocks(text: str, max_matches: int = 12) -> list[StockMatch]:
     return sorted(
         matches.values(), key=lambda item: item.confidence, reverse=True
     )[:max_matches]
-
