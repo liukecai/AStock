@@ -100,7 +100,66 @@ CREATE TABLE IF NOT EXISTS jobs (
     message TEXT NOT NULL DEFAULT '',
     details TEXT NOT NULL DEFAULT '{}'
 );
+
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    news_id TEXT,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    event_type TEXT NOT NULL,
+    subtype TEXT NOT NULL DEFAULT '',
+    intensity REAL NOT NULL DEFAULT 0.0,
+    direction TEXT NOT NULL CHECK (direction IN ('benefit', 'harm')),
+    confidence REAL NOT NULL DEFAULT 1.0,
+    published_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(news_id) REFERENCES news_items(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_published_at ON events(published_at DESC);
+
+CREATE TABLE IF NOT EXISTS commodity_impacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL,
+    commodity TEXT NOT NULL,
+    impact_type TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK (direction IN ('benefit', 'harm')),
+    FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS commodity_sector_mappings (
+    commodity TEXT NOT NULL,
+    sector TEXT NOT NULL,
+    relationship TEXT NOT NULL,
+    coefficient REAL NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (commodity, sector)
+);
+
+CREATE TABLE IF NOT EXISTS sector_stock_exposures (
+    sector TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    exposure REAL NOT NULL DEFAULT 100.0,
+    PRIMARY KEY (sector, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS event_stock_scores (
+    event_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    event_score REAL NOT NULL,
+    event_impact REAL NOT NULL,
+    sector_exposure REAL NOT NULL,
+    trend_strength REAL NOT NULL,
+    direction TEXT NOT NULL CHECK (direction IN ('benefit', 'harm')),
+    causal_chain TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    PRIMARY KEY (event_id, symbol),
+    FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+    FOREIGN KEY(symbol) REFERENCES stocks(symbol) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_stock_scores_score ON event_stock_scores(event_score DESC);
 """
+
 
 
 def _db_path() -> Path:
@@ -113,6 +172,7 @@ def _db_path() -> Path:
 def connect() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(_db_path())
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=WAL")
     try:
         yield conn
@@ -153,7 +213,6 @@ def init_db() -> None:
                 "ALTER TABLE news_items ADD COLUMN model_raw_output TEXT NOT NULL "
                 "DEFAULT '{}'"
             )
-        conn.execute("PRAGMA foreign_keys=ON")
         # Migration from the old news table to the unified news data layer if it exists
         old_table_exists = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='news'"
@@ -180,6 +239,66 @@ def init_db() -> None:
             )
             conn.execute("DROP TABLE IF EXISTS news")
             conn.execute("DROP INDEX IF EXISTS idx_news_symbol_date")
+
+        # Seeding static mappings and exposures for events
+        default_mappings = [
+            ("tungsten", "有色金属", "upstream", 1.0),
+            ("tungsten", "小金属", "upstream", 1.0),
+            ("tungsten", "硬质合金", "downstream", -0.8),
+            ("WF6", "电子化学品", "upstream", 1.0),
+            ("WF6", "特种气体", "upstream", 1.0),
+            ("WF6", "化学制品", "upstream", 1.0),
+            ("WF6", "半导体", "downstream", -0.6),
+            ("oil", "石油石化", "upstream", 1.0),
+            ("oil", "采掘服务", "upstream", 1.0),
+            ("oil", "化工", "downstream", -0.7),
+            ("oil", "航空机场", "downstream", -0.9),
+            ("copper", "有色金属", "upstream", 1.0),
+            ("copper", "铜", "upstream", 1.0),
+            ("copper", "电力设备", "downstream", -0.5),
+            ("gold", "贵金属", "upstream", 1.0),
+            ("gold", "黄金", "upstream", 1.0),
+            ("lithium", "能源金属", "upstream", 1.0),
+            ("lithium", "电池材料", "upstream", 1.0),
+            ("lithium", "锂电池", "downstream", -0.8),
+            ("lithium", "汽车", "downstream", -0.6),
+        ]
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO commodity_sector_mappings(
+              commodity, sector, relationship, coefficient
+            ) VALUES (?, ?, ?, ?)
+            """,
+            default_mappings,
+        )
+
+        default_exposures = [
+            ("有色金属", "000657", 100.0),
+            ("有色金属", "600549", 100.0),
+            ("有色金属", "603993", 100.0),
+            ("电子化学品", "688146", 100.0),
+            ("石油石化", "601857", 100.0),
+            ("石油石化", "600028", 100.0),
+            ("采掘服务", "601808", 100.0),
+            ("有色金属", "600362", 100.0),
+            ("有色金属", "601899", 100.0),
+            ("有色金属", "000878", 100.0),
+            ("贵金属", "600547", 100.0),
+            ("贵金属", "600489", 100.0),
+            ("贵金属", "600988", 100.0),
+            ("能源金属", "002466", 100.0),
+            ("能源金属", "002460", 100.0),
+            ("能源金属", "000792", 100.0),
+        ]
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO sector_stock_exposures(
+              sector, symbol, exposure
+            ) VALUES (?, ?, ?)
+            """,
+            default_exposures,
+        )
+
 
 
 def upsert_stock(symbol: str, name: str, industry: str = "未分类") -> None:

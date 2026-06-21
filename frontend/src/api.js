@@ -32,4 +32,19 @@ export const api = {
       method: "DELETE",
     }),
   getRecentNews: (limit = 50) => request(`/news?limit=${limit}`),
+  getEvents: (page = 1, limit = 50, commodity = "", eventType = "", direction = "") => {
+    let url = `/events?page=${page}&limit=${limit}`;
+    if (commodity) url += `&commodity=${encodeURIComponent(commodity)}`;
+    if (eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
+    if (direction) url += `&direction=${encodeURIComponent(direction)}`;
+    return request(url);
+  },
+  getEvent: (id) => request(`/events/${id}`),
+  analyzeEvent: (title, summary = "", time = "", newsId = "") =>
+    request("/events/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ news_id: newsId, title, summary, time }),
+    }),
+  rebuildEvents: () => request("/events/rebuild", { method: "POST" }),
 };

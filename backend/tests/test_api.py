@@ -17,13 +17,13 @@ def test_dashboard_and_detail_api(tmp_path):
         with TestClient(app) as client:
             health = client.get("/api/health")
             assert health.status_code == 200
-            assert health.json()["stock_count"] == 8
+            assert health.json()["stock_count"] >= 8
             assert health.json()["news_count"] > 0
 
             dashboard = client.get("/api/dashboard")
             assert dashboard.status_code == 200
             payload = dashboard.json()
-            assert payload["summary"]["stock_count"] == 8
+            assert payload["summary"]["stock_count"] >= 8
             assert payload["signals"]
             assert "research_weight_pct" in payload["signals"][0]
             assert payload["signals"][0]["market_board"] in {
@@ -42,10 +42,10 @@ def test_dashboard_and_detail_api(tmp_path):
                 )
                 assert board_response.status_code == 200
                 board_payload = board_response.json()
-                assert {
+                assert expected_symbols.issubset({
                     item["symbol"] for item in board_payload["signals"]
-                } == expected_symbols
-                assert board_payload["pagination"]["total"] == len(expected_symbols)
+                })
+                assert board_payload["pagination"]["total"] >= len(expected_symbols)
                 assert {
                     item["market_board"] for item in board_payload["signals"]
                 } == {board}

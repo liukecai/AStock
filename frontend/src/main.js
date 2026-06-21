@@ -9,6 +9,7 @@ const router = createRouter({
     { path: "/", component: () => import("./views/Dashboard.vue") },
     { path: "/stocks/:symbol", component: () => import("./views/StockDetail.vue") },
     { path: "/review", component: () => import("./views/MappingReview.vue") },
+    { path: "/events", component: () => import("./views/Events.vue") },
   ],
   scrollBehavior: () => ({ top: 0 }),
 });

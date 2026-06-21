@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field, model_validator
 
 from . import db
 from .services.pipeline import run_signal_pipeline
@@ -42,6 +44,13 @@ def health() -> dict:
     job = db.row("SELECT * FROM jobs WHERE name='market_update'")
     if job:
         job["details"] = json.loads(job["details"])
+
+    # Event statistics
+    event_count = db.row("SELECT COUNT(*) AS count FROM events")["count"]
+    score_count = db.row("SELECT COUNT(*) AS count FROM event_stock_scores")["count"]
+    comm_stats_raw = db.rows("SELECT commodity, COUNT(*) AS count FROM commodity_impacts GROUP BY commodity")
+    commodity_stats = {row["commodity"]: row["count"] for row in comm_stats_raw}
+
     return {
         "status": "ok",
         "provider": "akshare",
@@ -53,6 +62,11 @@ def health() -> dict:
             "SELECT COUNT(*) AS count FROM news_stock_links"
         )["count"],
         "market_job": job,
+        "event_stats": {
+            "event_count": event_count,
+            "stock_score_count": score_count,
+            "by_commodity": commodity_stats
+        }
     }
 
 
@@ -215,9 +229,6 @@ def run_pipeline() -> dict:
     return run_signal_pipeline()
 
 
-from pydantic import BaseModel
-
-
 class CreateLinkRequest(BaseModel):
     news_id: str
     symbol: str
@@ -317,3 +328,135 @@ def jobs() -> list[dict]:
     for item in items:
         item["details"] = json.loads(item["details"])
     return items
+
+
+# Event APIs
+class AnalyzeEventRequest(BaseModel):
+    news_id: str | None = Field(default=None, min_length=1, max_length=200)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    summary: str | None = Field(default=None, max_length=20_000)
+    time: datetime | None = None
+
+    @model_validator(mode="after")
+    def require_source(self) -> "AnalyzeEventRequest":
+        if not self.news_id and not self.title:
+            raise ValueError("必须提供 news_id 或 title")
+        return self
+
+
+@router.post("/events/analyze")
+def analyze_event(req: AnalyzeEventRequest) -> dict:
+    title = req.title
+    summary = req.summary or ""
+    published_at = req.time.isoformat() if req.time else None
+    news_id = req.news_id
+
+    if news_id:
+        news = db.row("SELECT * FROM news_items WHERE id=?", (news_id,))
+        if not news:
+            raise HTTPException(status_code=404, detail="新闻未找到")
+        title = news["title"]
+        summary = news["summary"] or ""
+        published_at = news["published_at"]
+
+    from .services.event_engine import analyze_event_text
+    result = analyze_event_text(title, summary, published_at, news_id)
+    if not result:
+        raise HTTPException(status_code=422, detail="未能从文本中识别出商品因果事件链")
+
+    return result
+
+
+@router.get("/events")
+def get_events(
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    commodity: Annotated[
+        Literal["tungsten", "WF6", "oil", "copper", "gold", "lithium"] | None,
+        Query(),
+    ] = None,
+    event_type: Annotated[
+        Literal["geo_conflict", "supply_shock", "policy_change", "disruption"] | None,
+        Query(),
+    ] = None,
+    direction: Annotated[Literal["benefit", "harm"] | None, Query()] = None,
+) -> dict:
+    where_clauses = []
+    params = []
+
+    if commodity:
+        where_clauses.append("e.id IN (SELECT event_id FROM commodity_impacts WHERE commodity=?)")
+        params.append(commodity)
+    if event_type:
+        where_clauses.append("e.event_type = ?")
+        params.append(event_type)
+    if direction:
+        where_clauses.append(
+            "EXISTS (SELECT 1 FROM event_stock_scores ess "
+            "WHERE ess.event_id=e.id AND ess.direction=?)"
+        )
+        params.append(direction)
+
+    where_str = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    offset = (page - 1) * limit
+
+    # Count total
+    total_query = f"SELECT COUNT(*) AS count FROM events e {where_str}"
+    total = db.row(total_query, tuple(params))["count"]
+
+    # Select events
+    query = f"""
+        SELECT e.* FROM events e
+        {where_str}
+        ORDER BY e.published_at DESC
+        LIMIT ? OFFSET ?
+    """
+    event_rows = db.rows(query, (*params, limit, offset))
+
+    # Hydrate events with impacts
+    events_hydrated = []
+    for ev in event_rows:
+        ev_dict = dict(ev)
+        ev_dict["commodity_impacts"] = db.rows(
+            "SELECT commodity, impact_type, direction FROM commodity_impacts WHERE event_id=?",
+            (ev_dict["id"],)
+        )
+        events_hydrated.append(ev_dict)
+
+    return {
+        "events": events_hydrated,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": (total + limit - 1) // limit if total > 0 else 0
+        }
+    }
+
+
+@router.get("/events/{event_id}")
+def get_event_detail(event_id: str) -> dict:
+    from .services.event_engine import get_event_detail_by_id
+    detail = get_event_detail_by_id(event_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="事件不存在")
+    return detail
+
+
+@router.post("/events/rebuild")
+def rebuild_events() -> dict:
+    news_list = db.rows("SELECT id, title, summary, published_at FROM news_items")
+    from .services.event_engine import analyze_event_text
+    processed = 0
+    created = 0
+    for news in news_list:
+        processed += 1
+        res = analyze_event_text(
+            title=news["title"],
+            summary=news["summary"] or "",
+            published_at=news["published_at"],
+            news_id=news["id"]
+        )
+        if res:
+            created += 1
+    return {"status": "ok", "processed": processed, "events_created": created}
