@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
 
+from .config import settings
+from .services.backtest import BacktestConfig, run_backtest_from_parquet
 from .services.announcements import (
     rescore_cninfo_announcements,
     update_cninfo_announcements,
@@ -24,6 +28,7 @@ def main() -> None:
             "update-all-news",
             "rescore-news",
             "run",
+            "backtest",
         ],
     )
     parser.add_argument("--force", action="store_true")
@@ -32,6 +37,9 @@ def main() -> None:
         help="逗号分隔的股票代码；省略时更新全部 A 股",
     )
     parser.add_argument("--universe-size", type=int)
+    parser.add_argument("--holding-period", type=int, default=5)
+    parser.add_argument("--transaction-cost-bps", type=float, default=0.0)
+    parser.add_argument("--output-dir")
     args = parser.parse_args()
 
     if args.command == "seed":
@@ -48,7 +56,20 @@ def main() -> None:
         print(update_rss_news())
     elif args.command == "rescore-news":
         print(rescore_cninfo_announcements())
-    print(run_signal_pipeline())
+    elif args.command == "backtest":
+        parquet_root = Path(settings.data_dir) / "parquet"
+        result = run_backtest_from_parquet(
+            parquet_root / "factors/signals.parquet",
+            parquet_root / "market/daily_prices.parquet",
+            Path(args.output_dir or Path(settings.data_dir) / "backtest"),
+            BacktestConfig(
+                holding_period=args.holding_period,
+                transaction_cost_bps=args.transaction_cost_bps,
+            ),
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    elif args.command == "run":
+        print(run_signal_pipeline())
 
 
 if __name__ == "__main__":
