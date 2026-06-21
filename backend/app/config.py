@@ -85,10 +85,13 @@ class Settings:
         default_factory=lambda: _as_bool(os.getenv("DEMO_DATA"), False)
     )
     akshare_universe_size: int = field(
-        default_factory=lambda: int(os.getenv("AKSHARE_UNIVERSE_SIZE", "500"))
+        default_factory=lambda: int(os.getenv("AKSHARE_UNIVERSE_SIZE", "0"))
     )
     akshare_source: str = field(
         default_factory=lambda: os.getenv("AKSHARE_SOURCE", "sina")
+    )
+    akshare_delay: float = field(
+        default_factory=lambda: float(os.getenv("AKSHARE_DELAY", "0.35"))
     )
     akshare_history_days: int = field(
         default_factory=lambda: int(os.getenv("AKSHARE_HISTORY_DAYS", "500"))

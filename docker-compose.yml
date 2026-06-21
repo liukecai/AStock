@@ -9,6 +9,8 @@ services:
       DATA_DIR: /app/data
       MARKET_PROVIDER: akshare
       AKSHARE_SOURCE: sina
+      AKSHARE_UNIVERSE_SIZE: "0"
+      AKSHARE_DELAY: "0.35"
       DEMO_DATA: "false"
       NEWS_HISTORY_DAYS: "7"
       RSSHUB_BASE_URL: http://rsshub:1200

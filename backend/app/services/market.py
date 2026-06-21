@@ -116,13 +116,17 @@ class AkshareProvider:
     def daily_prices_with_retry(
         self, symbol: str, start_date: str, end_date: str, retries: int = 3
     ) -> list[StockBar]:
+        import random
         last_error: Exception | None = None
         for attempt in range(retries):
             try:
+                delay = getattr(settings, "akshare_delay", 0.35)
+                if delay > 0:
+                    time.sleep(delay * random.uniform(0.8, 1.2))
                 return self.daily_prices(symbol, start_date, end_date)
             except Exception as exc:
                 last_error = exc
-                time.sleep(0.8 * (attempt + 1))
+                time.sleep(2.0 * (attempt + 1))
         raise RuntimeError(f"{symbol}: {last_error}") from last_error
 
 
