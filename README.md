@@ -101,6 +101,7 @@ Compose 内自托管，不暴露公网端口；单个源失败会被隔离并记
 ## API
 
 - `GET /api/health`：服务、数据状态及商品事件统计
+- `GET /api/admin/auth-status`：返回当前是否启用管理授权
 - `GET /api/dashboard`：最新信号及汇总
 - `GET /api/stocks/today`：Top N 当日研究列表
 - `GET /api/signal`：查询最新信号
@@ -112,6 +113,14 @@ Compose 内自托管，不暴露公网端口；单个源失败会被隔离并记
 - `GET /api/events/{event_id}/reaction`：获取 V2 传导链的详细反应打分与传导链分析结果（主字段为 `event`、`commodity_impacts`、`v2_reaction_scores`，保留 `reactions` 兼容别名）
 - `GET /api/stocks/{symbol}/commodity-exposure`：获取该个股的商品因果画像与敞口多维度属性特征（主字段为 `commodity_profiles`，保留 `profiles` 兼容别名）
 - `POST /api/events/rebuild`：对数据库中已有新闻批量重构分析商品事件
+
+若配置 `ADMIN_SECRET`，以下写操作需要在请求头中附带 `X-Admin-Secret`：
+
+- `POST /api/pipeline/run`
+- `POST /api/news-links`
+- `DELETE /api/news-links`
+- `POST /api/events/analyze`
+- `POST /api/events/rebuild`
 
 ## 商品事件驱动量化模块 (MVP)
 

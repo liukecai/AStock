@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { api } from "../api";
+import { adminAuth, getAdminSecret, openAdminDialog } from "../adminAuth";
 
 const loading = ref(false);
 const rebuilding = ref(false);
@@ -83,6 +84,10 @@ async function selectEvent(id) {
 }
 
 async function handleAnalyze() {
+  if (adminAuth.required && !adminAuth.authorized) {
+    openAdminDialog();
+    return;
+  }
   if (!formTitle.value.trim()) {
     error.value = "新闻标题不能为空";
     return;
@@ -93,7 +98,9 @@ async function handleAnalyze() {
     const res = await api.analyzeEvent(
       formTitle.value,
       formSummary.value,
-      formTime.value
+      formTime.value,
+      "",
+      getAdminSecret()
     );
     successMsg.value = "分析成功并存入数据库！";
     setTimeout(() => (successMsg.value = ""), 3000);
@@ -112,13 +119,17 @@ async function handleAnalyze() {
 }
 
 async function handleRebuild() {
+  if (adminAuth.required && !adminAuth.authorized) {
+    openAdminDialog();
+    return;
+  }
   if (!confirm("确定要对系统中所有已有新闻重新运行事件提取与量化打分吗？此操作将重建事件索引。")) {
     return;
   }
   rebuilding.value = true;
   error.value = "";
   try {
-    const res = await api.rebuildEvents();
+    const res = await api.rebuildEvents(getAdminSecret());
     successMsg.value = `批量重建完成：已处理 ${res.processed} 条新闻，生成 ${res.events_created} 个商品事件。`;
     page.value = 1;
     selectedEvent.value = null;

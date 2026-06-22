@@ -9,9 +9,11 @@ def test_dashboard_and_detail_api(tmp_path):
     original_path = settings.database_path
     original_scheduler = settings.enable_scheduler
     original_demo = settings.demo_data
+    original_admin_secret = settings.admin_secret
     object.__setattr__(settings, "database_path", database_path)
     object.__setattr__(settings, "enable_scheduler", False)
     object.__setattr__(settings, "demo_data", True)
+    object.__setattr__(settings, "admin_secret", None)
 
     try:
         with TestClient(app) as client:
@@ -65,3 +67,43 @@ def test_dashboard_and_detail_api(tmp_path):
         object.__setattr__(settings, "database_path", original_path)
         object.__setattr__(settings, "enable_scheduler", original_scheduler)
         object.__setattr__(settings, "demo_data", original_demo)
+        object.__setattr__(settings, "admin_secret", original_admin_secret)
+
+
+def test_admin_auth_required_for_mutations(tmp_path):
+    database_path = tmp_path / "test-auth.db"
+    original_path = settings.database_path
+    original_scheduler = settings.enable_scheduler
+    original_demo = settings.demo_data
+    original_admin_secret = settings.admin_secret
+    object.__setattr__(settings, "database_path", database_path)
+    object.__setattr__(settings, "enable_scheduler", False)
+    object.__setattr__(settings, "demo_data", True)
+    object.__setattr__(settings, "admin_secret", "top-secret")
+
+    try:
+        with TestClient(app) as client:
+            status = client.get("/api/admin/auth-status")
+            assert status.status_code == 200
+            assert status.json() == {"required": True}
+
+            forbidden = client.post("/api/pipeline/run")
+            assert forbidden.status_code == 403
+
+            authorized = client.post(
+                "/api/admin/authorize",
+                headers={"X-Admin-Secret": "top-secret"},
+            )
+            assert authorized.status_code == 200
+
+            rerun = client.post(
+                "/api/pipeline/run",
+                headers={"X-Admin-Secret": "top-secret"},
+            )
+            assert rerun.status_code == 200
+            assert "signal_date" in rerun.json()
+    finally:
+        object.__setattr__(settings, "database_path", original_path)
+        object.__setattr__(settings, "enable_scheduler", original_scheduler)
+        object.__setattr__(settings, "demo_data", original_demo)
+        object.__setattr__(settings, "admin_secret", original_admin_secret)

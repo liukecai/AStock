@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { api } from "../api";
+import { adminAuth, getAdminSecret, openAdminDialog } from "../adminAuth";
 import SignalListRow from "../components/SignalListRow.vue";
 
 const data = ref({ signals: [], summary: {} });
@@ -81,11 +82,17 @@ function goToPage() {
 }
 
 async function refresh() {
+  if (adminAuth.required && !adminAuth.authorized) {
+    openAdminDialog();
+    return;
+  }
   refreshing.value = true;
   try {
-    await api.runPipeline();
+    await api.runPipeline(getAdminSecret());
     page.value = 1;
     await load();
+  } catch (err) {
+    error.value = err.message;
   } finally {
     refreshing.value = false;
   }
@@ -104,7 +111,7 @@ onMounted(load);
       </p>
     </div>
     <button class="refresh-button" :disabled="refreshing" @click="refresh">
-      <span>{{ refreshing ? "计算中…" : "重新计算信号" }}</span>
+      <span>{{ refreshing ? "计算中…" : adminAuth.required && !adminAuth.authorized ? "管理授权后可重算" : "重新计算信号" }}</span>
       <b>↗</b>
     </button>
   </section>

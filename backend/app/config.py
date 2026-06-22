@@ -135,6 +135,9 @@ class Settings:
     event_llm_timeout_seconds: float = field(
         default_factory=lambda: float(os.getenv("EVENT_LLM_TIMEOUT_SECONDS", "10.0"))
     )
+    admin_secret: str | None = field(
+        default_factory=lambda: os.getenv("ADMIN_SECRET")
+    )
 
 
 settings = Settings()

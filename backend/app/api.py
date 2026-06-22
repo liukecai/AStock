@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import secrets
 import json
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
 from . import db
+from .config import settings
 from .services.pipeline import run_signal_pipeline
 
 router = APIRouter(prefix="/api")
@@ -37,6 +39,28 @@ def _decode_signal(item: dict) -> dict:
     item["research_weight_pct"] = item["metrics"].get("research_weight_pct", 0)
     item["market_board"] = _market_board(item["symbol"])
     return item
+
+
+def _require_admin(x_admin_secret: Annotated[str | None, Header()] = None) -> None:
+    if not settings.admin_secret:
+        return
+    if not x_admin_secret or not secrets.compare_digest(
+        x_admin_secret, settings.admin_secret
+    ):
+        raise HTTPException(status_code=403, detail="当前操作需要管理授权")
+
+
+@router.get("/admin/auth-status")
+def admin_auth_status() -> dict:
+    return {"required": bool(settings.admin_secret)}
+
+
+@router.post("/admin/authorize")
+def authorize_admin(
+    x_admin_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    _require_admin(x_admin_secret)
+    return {"status": "ok"}
 
 
 @router.get("/health")
@@ -225,7 +249,10 @@ def stock_detail(symbol: str) -> dict:
 
 
 @router.post("/pipeline/run")
-def run_pipeline() -> dict:
+def run_pipeline(
+    x_admin_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    _require_admin(x_admin_secret)
     return run_signal_pipeline()
 
 
@@ -281,7 +308,11 @@ def get_news_links(
 
 
 @router.post("/news-links")
-def create_news_link(req: CreateLinkRequest) -> dict:
+def create_news_link(
+    req: CreateLinkRequest,
+    x_admin_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    _require_admin(x_admin_secret)
     stock = db.row("SELECT symbol FROM stocks WHERE symbol=?", (req.symbol,))
     if not stock:
         raise HTTPException(status_code=404, detail="该股票不存在于股票池中")
@@ -302,8 +333,10 @@ def create_news_link(req: CreateLinkRequest) -> dict:
 @router.delete("/news-links")
 def delete_news_link(
     news_id: Annotated[str, Query()],
-    symbol: Annotated[str, Query()]
+    symbol: Annotated[str, Query()],
+    x_admin_secret: Annotated[str | None, Header()] = None,
 ) -> dict:
+    _require_admin(x_admin_secret)
     with db.connect() as conn:
         conn.execute(
             "DELETE FROM news_stock_links WHERE news_id=? AND symbol=?",
@@ -345,7 +378,11 @@ class AnalyzeEventRequest(BaseModel):
 
 
 @router.post("/events/analyze")
-def analyze_event(req: AnalyzeEventRequest) -> dict:
+def analyze_event(
+    req: AnalyzeEventRequest,
+    x_admin_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    _require_admin(x_admin_secret)
     title = req.title
     summary = req.summary or ""
     published_at = req.time.isoformat() if req.time else None
@@ -463,7 +500,10 @@ def get_stock_commodity_exposure_endpoint(symbol: str) -> dict:
 
 
 @router.post("/events/rebuild")
-def rebuild_events() -> dict:
+def rebuild_events(
+    x_admin_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    _require_admin(x_admin_secret)
     news_list = db.rows("SELECT id, title, summary, published_at FROM news_items")
     from .services.event_engine import analyze_event_text
     with db.connect() as conn:

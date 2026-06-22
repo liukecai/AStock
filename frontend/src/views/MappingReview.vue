@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import { api } from "../api";
+import { adminAuth, getAdminSecret, openAdminDialog } from "../adminAuth";
 
 const activeTab = ref("mappings"); // mappings, linkNews
 const mappings = ref([]);
@@ -61,12 +62,16 @@ function handleTabChange(tab) {
 }
 
 async function createLink(newsId, symbol, conf) {
+  if (adminAuth.required && !adminAuth.authorized) {
+    openAdminDialog();
+    return;
+  }
   if (!symbol || symbol.length !== 6) {
     showToast("请输入有效的六位股票代码！");
     return;
   }
   try {
-    await api.createNewsLink(newsId, symbol, conf, "manual");
+    await api.createNewsLink(newsId, symbol, conf, "manual", getAdminSecret());
     showToast("关联映射创建成功！");
     targetSymbol.value = "";
     selectedNewsId.value = "";
@@ -81,11 +86,15 @@ async function createLink(newsId, symbol, conf) {
 }
 
 async function deleteLink(newsId, symbol) {
+  if (adminAuth.required && !adminAuth.authorized) {
+    openAdminDialog();
+    return;
+  }
   if (!confirm(`确认要删除该股票 (${symbol}) 与新闻的映射关系吗？`)) {
     return;
   }
   try {
-    await api.deleteNewsLink(newsId, symbol);
+    await api.deleteNewsLink(newsId, symbol, getAdminSecret());
     showToast("映射删除成功！");
     loadMappings();
   } catch (err) {
@@ -94,6 +103,10 @@ async function deleteLink(newsId, symbol) {
 }
 
 async function updateConfidence(newsId, symbol, currentConf) {
+  if (adminAuth.required && !adminAuth.authorized) {
+    openAdminDialog();
+    return;
+  }
   const newConfStr = prompt("请输入新的置信度 (0.0 - 1.0):", currentConf);
   if (newConfStr === null) return;
   const newConf = parseFloat(newConfStr);
@@ -102,7 +115,7 @@ async function updateConfidence(newsId, symbol, currentConf) {
     return;
   }
   try {
-    await api.createNewsLink(newsId, symbol, newConf, "manual");
+    await api.createNewsLink(newsId, symbol, newConf, "manual", getAdminSecret());
     showToast("置信度更新成功！");
     loadMappings();
   } catch (err) {
