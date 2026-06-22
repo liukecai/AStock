@@ -38,4 +38,3 @@ def test_llm_config_override(monkeypatch):
     assert settings.event_llm_api_key == "sk-12345"
     assert settings.event_llm_model == "gpt-4o"
     assert settings.event_llm_timeout_seconds == 15.5
-

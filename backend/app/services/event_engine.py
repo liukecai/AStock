@@ -201,17 +201,17 @@ def extract_event_rule_based(title: str, summary: str) -> dict[str, Any]:
     commodity = identify_commodity(title + " " + summary)
     if not commodity:
         return {"is_relevant": False}
-        
+
     source_text = title + " " + summary
     event_classification = identify_event_type(source_text)
     if not event_classification:
         return {"is_relevant": False}
-        
+
     event_type, subtype = event_classification
     impact_type = identify_commodity_shock(source_text)
     intensity, confidence = extract_intensity_confidence(title, summary)
     direction = commodity_impact_direction(source_text, impact_type)
-    
+
     return {
         "is_relevant": True,
         "commodity": commodity,
@@ -233,11 +233,11 @@ def analyze_event_text(
 ) -> dict[str, Any] | None:
     if not title:
         return None
-        
+
     extraction_source = "rule"
     extraction_raw_output = "{}"
     extracted = None
-    
+
     try:
         llm_res = extract_event_llm(title, summary)
         if llm_res is not None:
@@ -263,10 +263,10 @@ def analyze_event_text(
     direction = extracted["direction"]
     intensity = extracted["intensity"]
     confidence = extracted["confidence"]
-    
+
     if not published_at:
         published_at = datetime.now().isoformat()
-        
+
     # Generate Event ID
     h = hashlib.md5(f"{title}-{published_at}".encode("utf-8")).hexdigest()
     event_id = f"evt_{h[:16]}"
