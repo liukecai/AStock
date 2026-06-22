@@ -108,7 +108,9 @@ Compose 内自托管，不暴露公网端口；单个源失败会被隔离并记
 - `POST /api/pipeline/run`：手动重算信号
 - `POST /api/events/analyze`：分析特定新闻（可传 `news_id` 或 `title`/`summary`/`time`）
 - `GET /api/events`：获取商品事件列表（支持分页，以及按 `commodity` / `event_type` / `direction` 筛选）
-- `GET /api/events/{id}`：获取单次事件的详细因果链与受益/受损股票排序
+- `GET /api/events/{id}`：获取单次事件的详细因果链与受益/受损股票排序（包含 V2 `v2_reaction_scores` 附加字段）
+- `GET /api/events/{event_id}/reaction`：获取 V2 传导链的详细反应打分与传导链分析结果
+- `GET /api/stocks/{symbol}/commodity-exposure`：获取该个股的商品因果画像与敞口多维度属性特征
 - `POST /api/events/rebuild`：对数据库中已有新闻批量重构分析商品事件
 
 ## 商品事件驱动量化模块 (MVP)
@@ -149,6 +151,23 @@ $$\text{Event Score} = 0.5 \times \text{Event Impact} + 0.3 \times \text{Sector 
 
 > [!WARNING]
 > 请勿将真实的 API Key 提交到代码仓库中，推荐通过本地 `.env` 环境变量文件进行配置。
+
+
+### 5. 商品传导引擎 V2 (Phase 1)
+V2 版本在 V1 MVP 基础上扩展了细粒度的产业链传导与财务业绩影响评估层。当前支持 `oil`、`lithium` 和 `copper` 三类商品的画像解析与反应计算。
+
+- **多表支持 (Additive Schema)**：
+  - `company_commodity_profiles`：个股商品暴露画像（如角色 `role`，传导渠道 `channel`，传导时滞 `lag_days`，弹性 `earnings_elasticity` 等）。
+  - `event_earnings_impacts`：事件的个股财务业绩影响预测记录。
+  - `event_stock_reaction_scores_v2`：V2 版本量化反应打分详情表。
+- **打分计算公式**：
+  $$\text{Reaction Score}_{V2} = 0.25 \times \text{shock\_score} + 0.25 \times \text{exposure\_score} + 0.25 \times \text{earnings\_score} + 0.15 \times \text{sentiment\_score} + 0.10 \times \text{trend\_score}$$
+  - `shock_score`：基于事件源的冲击烈度及置信度打分。
+  - `exposure_score`：从 `exposure_strength` 结合定价权及传导能力调节得出。
+  - `earnings_score`：由传导渠道（`revenue`/`cost`/`spread`/`inventory`）、业绩弹性及传导时滞 `lag_days` 折扣得出。
+  - `sentiment_score`：画像基准 50 分及角色/领头羊属性溢价。
+  - `trend_score`：个股最新技术面趋势强度（从 `signals.trend_score` 获取，缺失时为 50）。
+
 
 
 

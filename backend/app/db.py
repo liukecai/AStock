@@ -160,6 +160,59 @@ CREATE TABLE IF NOT EXISTS event_stock_scores (
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_stock_scores_score ON event_stock_scores(event_score DESC);
+
+CREATE TABLE IF NOT EXISTS company_commodity_profiles (
+    symbol TEXT NOT NULL,
+    commodity TEXT NOT NULL,
+    role TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    benefit_when_price_up INTEGER NOT NULL DEFAULT 0,
+    benefit_when_price_down INTEGER NOT NULL DEFAULT 0,
+    exposure_strength REAL NOT NULL DEFAULT 50.0,
+    pricing_power REAL NOT NULL DEFAULT 50.0,
+    inventory_sensitivity REAL NOT NULL DEFAULT 50.0,
+    pass_through_ability REAL NOT NULL DEFAULT 50.0,
+    earnings_elasticity REAL NOT NULL DEFAULT 50.0,
+    lag_days INTEGER NOT NULL DEFAULT 0,
+    evidence TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, commodity)
+);
+
+CREATE TABLE IF NOT EXISTS event_earnings_impacts (
+    event_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    commodity TEXT NOT NULL,
+    revenue_impact_score REAL NOT NULL,
+    margin_impact_score REAL NOT NULL,
+    profit_impact_score REAL NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.7,
+    horizon TEXT NOT NULL DEFAULT 'medium',
+    reason TEXT NOT NULL,
+    PRIMARY KEY (event_id, symbol, commodity),
+    FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+    FOREIGN KEY(symbol) REFERENCES stocks(symbol) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS event_stock_reaction_scores_v2 (
+    event_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    commodity TEXT NOT NULL,
+    shock_score REAL NOT NULL,
+    exposure_score REAL NOT NULL,
+    earnings_score REAL NOT NULL,
+    sentiment_score REAL NOT NULL,
+    trend_score REAL NOT NULL,
+    reaction_score REAL NOT NULL,
+    direction TEXT NOT NULL,
+    horizon TEXT NOT NULL DEFAULT 'medium',
+    confidence REAL NOT NULL DEFAULT 0.7,
+    transmission_chain TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    PRIMARY KEY (event_id, symbol, commodity),
+    FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+    FOREIGN KEY(symbol) REFERENCES stocks(symbol) ON DELETE CASCADE
+);
 """
 
 
@@ -225,6 +278,61 @@ def init_db() -> None:
         if "extraction_raw_output" not in event_columns:
             conn.execute(
                 "ALTER TABLE events ADD COLUMN extraction_raw_output TEXT NOT NULL DEFAULT '{}'"
+            )
+        earnings_pk = [
+            item["name"]
+            for item in conn.execute("PRAGMA table_info(event_earnings_impacts)")
+            if item["pk"]
+        ]
+        if earnings_pk and earnings_pk != ["event_id", "symbol", "commodity"]:
+            conn.executescript(
+                """
+                DROP TABLE IF EXISTS event_earnings_impacts;
+                CREATE TABLE event_earnings_impacts (
+                    event_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    commodity TEXT NOT NULL,
+                    revenue_impact_score REAL NOT NULL,
+                    margin_impact_score REAL NOT NULL,
+                    profit_impact_score REAL NOT NULL,
+                    confidence REAL NOT NULL DEFAULT 0.7,
+                    horizon TEXT NOT NULL DEFAULT 'medium',
+                    reason TEXT NOT NULL,
+                    PRIMARY KEY (event_id, symbol, commodity),
+                    FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+                    FOREIGN KEY(symbol) REFERENCES stocks(symbol) ON DELETE CASCADE
+                );
+                """
+            )
+        reaction_pk = [
+            item["name"]
+            for item in conn.execute("PRAGMA table_info(event_stock_reaction_scores_v2)")
+            if item["pk"]
+        ]
+        if reaction_pk and reaction_pk != ["event_id", "symbol", "commodity"]:
+            conn.executescript(
+                """
+                DROP TABLE IF EXISTS event_stock_reaction_scores_v2;
+                CREATE TABLE event_stock_reaction_scores_v2 (
+                    event_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    commodity TEXT NOT NULL,
+                    shock_score REAL NOT NULL,
+                    exposure_score REAL NOT NULL,
+                    earnings_score REAL NOT NULL,
+                    sentiment_score REAL NOT NULL,
+                    trend_score REAL NOT NULL,
+                    reaction_score REAL NOT NULL,
+                    direction TEXT NOT NULL,
+                    horizon TEXT NOT NULL DEFAULT 'medium',
+                    confidence REAL NOT NULL DEFAULT 0.7,
+                    transmission_chain TEXT NOT NULL,
+                    evidence TEXT NOT NULL,
+                    PRIMARY KEY (event_id, symbol, commodity),
+                    FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+                    FOREIGN KEY(symbol) REFERENCES stocks(symbol) ON DELETE CASCADE
+                );
+                """
             )
         # Migration from the old news table to the unified news data layer if it exists
         old_table_exists = conn.execute(
@@ -310,6 +418,35 @@ def init_db() -> None:
             ) VALUES (?, ?, ?)
             """,
             default_exposures,
+        )
+
+        now_str = datetime.now().isoformat()
+        default_profiles = [
+            # Oil
+            ("601857", "oil", "upstream_resource", "revenue", 1, 0, 80.0, 80.0, 50.0, 60.0, 85.0, 0, "中国石油为原油开采上游企业，受益于原油价格上涨", now_str),
+            ("600028", "oil", "midstream_processing", "spread", 1, 1, 70.0, 60.0, 70.0, 65.0, 60.0, 5, "中国石化主营炼油与化工，为中游加工环节，受益于原油价格波动带来的价差空间", now_str),
+            ("601808", "oil", "upstream_service", "revenue", 1, 0, 75.0, 70.0, 30.0, 50.0, 70.0, 30, "中海油服提供油气田服务，属于上游服务环节，价格上涨传导至资本开支有一定滞后", now_str),
+            ("601111", "oil", "transport", "cost", 0, 1, 85.0, 40.0, 40.0, 50.0, 80.0, 7, "航空企业，燃油为主要成本支出，受益于原油价格下跌", now_str),
+            # Lithium
+            ("002466", "lithium", "upstream_resource", "revenue", 1, 0, 90.0, 80.0, 60.0, 70.0, 90.0, 0, "天齐锂业拥有优质锂资源，属于锂行业上游矿企，受益于锂价上涨", now_str),
+            ("002460", "lithium", "upstream_resource", "revenue", 1, 0, 85.0, 75.0, 65.0, 70.0, 85.0, 0, "赣锋锂业为锂盐及资源开发巨头，属于上游企业，受益于锂价上涨", now_str),
+            ("000792", "lithium", "upstream_resource", "revenue", 1, 0, 80.0, 70.0, 50.0, 60.0, 80.0, 0, "盐湖股份拥有盐湖锂资源，属于锂行业上游，受益于锂价上涨", now_str),
+            ("300750", "lithium", "downstream_manufacturing", "cost", 0, 1, 75.0, 85.0, 60.0, 80.0, 70.0, 15, "宁德时代为动力电池制造商，锂是其重要原材料成本，受益于锂价下跌", now_str),
+            # Copper
+            ("600362", "copper", "upstream_resource", "revenue", 1, 0, 85.0, 70.0, 60.0, 75.0, 80.0, 0, "江西铜业为大型铜矿开采及冶炼企业，属于铜行业上游，受益于铜价上涨", now_str),
+            ("601899", "copper", "upstream_resource", "revenue", 1, 0, 80.0, 80.0, 50.0, 70.0, 85.0, 0, "紫金矿业为综合性矿业龙头，铜资源储量丰富，受益于铜价上涨", now_str),
+            ("000878", "copper", "upstream_resource", "revenue", 1, 0, 80.0, 65.0, 60.0, 70.0, 75.0, 0, "云南铜业主营铜矿开采及冶炼，属于铜行业上游，受益于铜价上涨", now_str),
+            ("300274", "copper", "downstream_manufacturing", "cost", 0, 1, 60.0, 75.0, 50.0, 70.0, 55.0, 20, "阳光电源主要产品为光伏逆变器等，铜是重要铜排和电缆等材料成本，受益于铜价下跌", now_str),
+        ]
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO company_commodity_profiles(
+                symbol, commodity, role, channel, benefit_when_price_up, benefit_when_price_down,
+                exposure_strength, pricing_power, inventory_sensitivity, pass_through_ability,
+                earnings_elasticity, lag_days, evidence, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            default_profiles,
         )
 
 

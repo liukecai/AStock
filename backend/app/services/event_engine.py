@@ -451,6 +451,14 @@ def analyze_event_text(
                 )
             )
             
+    # V2 transmission scoring integration (failures must not block V1)
+    try:
+        from .transmission_engine import calculate_v2_transmission
+        calculate_v2_transmission(event_id)
+    except Exception as e:
+        import sys
+        print(f"Error calculating V2 transmission in analyze_event_text: {e}", file=sys.stderr)
+
     # Load and return the saved event with full causal chain and stock scores
     return get_event_detail_by_id(event_id)
 
@@ -483,4 +491,27 @@ def get_event_detail_by_id(event_id: str) -> dict[str, Any] | None:
     event_dict = dict(event)
     event_dict["commodity_impacts"] = [dict(ci) for ci in commodity_impacts]
     event_dict["stock_scores"] = stock_scores
+
+    # Add V2 reaction scores if available, without breaking V1 details on failure
+    v2_reaction_scores = []
+    try:
+        v2_raw = db.rows(
+            """
+            SELECT v2.*, s.name, s.industry
+            FROM event_stock_reaction_scores_v2 v2
+            JOIN stocks s ON v2.symbol = s.symbol
+            WHERE v2.event_id=?
+            ORDER BY v2.reaction_score DESC
+            """,
+            (event_id,)
+        )
+        for r in v2_raw:
+            r_dict = dict(r)
+            r_dict["transmission_chain"] = json.loads(r_dict["transmission_chain"])
+            v2_reaction_scores.append(r_dict)
+    except Exception as e:
+        import sys
+        print(f"Error loading V2 scores in get_event_detail_by_id: {e}", file=sys.stderr)
+
+    event_dict["v2_reaction_scores"] = v2_reaction_scores
     return event_dict

@@ -443,6 +443,25 @@ def get_event_detail(event_id: str) -> dict:
     return detail
 
 
+@router.get("/events/{event_id}/reaction")
+def get_event_reaction_v2_endpoint(event_id: str) -> dict:
+    from .services.transmission_engine import get_event_reactions_v2
+    res = get_event_reactions_v2(event_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="事件不存在")
+    return res
+
+
+@router.get("/stocks/{symbol}/commodity-exposure")
+def get_stock_commodity_exposure_endpoint(symbol: str) -> dict:
+    from .services.transmission_engine import get_stock_exposure_v2
+    res = get_stock_exposure_v2(symbol)
+    if not res:
+        raise HTTPException(status_code=404, detail="该股票不存在或未配置商品画像")
+    return res
+
+
+
 @router.post("/events/rebuild")
 def rebuild_events() -> dict:
     news_list = db.rows("SELECT id, title, summary, published_at FROM news_items")
