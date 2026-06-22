@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { api } from "../api";
-import ScoreRing from "../components/ScoreRing.vue";
+import SignalListRow from "../components/SignalListRow.vue";
 
 const data = ref({ signals: [], summary: {} });
 const loading = ref(true);
@@ -174,38 +174,11 @@ onMounted(load);
         <span>标的</span><span>状态</span><span>趋势</span><span>舆情</span
         ><span>研究权重</span><span>综合分</span>
       </div>
-      <RouterLink
+      <SignalListRow
         v-for="item in visibleSignals"
         :key="item.symbol"
-        :to="`/stocks/${item.symbol}`"
-        class="signal-row"
-      >
-        <div class="stock-identity">
-          <div class="stock-name">
-            <b>{{ item.name }}</b>
-            <span class="board-badge" :class="`board-${item.market_board}`">
-              {{ item.market_board }}
-            </span>
-          </div>
-          <small>{{ item.symbol }} · {{ item.industry }}</small>
-        </div>
-        <div><span class="status-pill" :class="item.status">{{ item.status }}</span></div>
-        <div class="metric-cell">
-          <b>{{ Math.round(item.trend_score) }}</b>
-          <i><i :style="{ width: `${item.trend_score}%` }"></i></i>
-        </div>
-        <div class="sentiment-cell">
-          <span :class="{ positive: item.metrics.sentiment > 0 }">
-            {{ item.metrics.sentiment > 0 ? "+" : "" }}{{ item.metrics.sentiment.toFixed(2) }}
-          </span>
-          <small>{{ item.metrics.keywords.slice(0, 2).join(" · ") || "中性" }}</small>
-        </div>
-        <div class="burst-cell">
-          <b>{{ item.research_weight_pct }}%</b>
-          <small>Z {{ item.burst.toFixed(1) }} · {{ item.metrics.mentions_today }} 条</small>
-        </div>
-        <ScoreRing :value="item.total_score" />
-      </RouterLink>
+        :item="item"
+      />
       <div v-if="!loading && !visibleSignals.length" class="empty-state">当前筛选下没有信号</div>
       <div v-if="totalSignals > 0" class="pagination">
         <div class="page-size">

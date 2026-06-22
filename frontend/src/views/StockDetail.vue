@@ -2,13 +2,149 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api } from "../api";
+import DecisionChainTimeline from "../components/DecisionChainTimeline.vue";
+import DecisionSummaryCard from "../components/DecisionSummaryCard.vue";
+import DriverBreakdownPanel from "../components/DriverBreakdownPanel.vue";
+import EvidenceFeed from "../components/EvidenceFeed.vue";
 import PriceChart from "../components/PriceChart.vue";
 import ScoreRing from "../components/ScoreRing.vue";
 
 const route = useRoute();
 const data = ref(null);
 const error = ref("");
-const metrics = computed(() => data.value?.signal?.metrics || {});
+const signal = computed(() => data.value?.signal || null);
+const metrics = computed(() => signal.value?.metrics || {});
+
+function formatSigned(value, digits = 2) {
+  const num = Number(value || 0);
+  return `${num > 0 ? "+" : ""}${num.toFixed(digits)}`;
+}
+
+function formatPercent(value, digits = 1) {
+  return `${(Number(value || 0) * 100).toFixed(digits)}%`;
+}
+
+const dominantDriver = computed(() => {
+  if (!signal.value) return "趋势主导";
+  const sentimentImpact = Math.abs(metrics.value.sentiment || 0) * 100 + (signal.value.burst || 0) * 6;
+  if (sentimentImpact >= signal.value.trend_score && sentimentImpact >= signal.value.volume_score) {
+    return "新闻主导";
+  }
+  if (signal.value.volume_score >= signal.value.trend_score - 6) {
+    return "量能确认";
+  }
+  return "趋势主导";
+});
+
+const decisionSummary = computed(() => {
+  if (!signal.value) return "";
+  const trendText = signal.value.trend_score >= 70 ? "趋势结构已成立" : "趋势结构仍在观察";
+  const sentimentText =
+    (metrics.value.sentiment || 0) > 0.15
+      ? "近期舆情偏正"
+      : (metrics.value.sentiment || 0) < -0.15
+        ? "近期舆情承压"
+        : "舆情暂时中性";
+  const burstText =
+    (signal.value.burst || 0) >= 3
+      ? `热度抬升来自 ${metrics.value.mentions_today ?? 0} 条近期催化`
+      : "热度尚未形成强确认";
+  const conclusion =
+    (signal.value.total_score || 0) >= 75
+      ? "当前适合进入重点研究清单。"
+      : "当前更适合维持观察，不宜强化结论。";
+  return `${trendText}，${sentimentText}，${burstText}，${conclusion}`;
+});
+
+const summaryHighlights = computed(() => [
+  {
+    label: "主导因子",
+    value: dominantDriver.value,
+    note: "决定当前排序的第一驱动力",
+  },
+  {
+    label: "热度确认",
+    value: `Z ${(signal.value?.burst || 0).toFixed(1)}`,
+    note: `今日提及 ${metrics.value.mentions_today ?? 0} 条`,
+  },
+  {
+    label: "行业偏差",
+    value:
+      metrics.value.total_score_neutral !== undefined
+        ? formatSigned(metrics.value.total_score_neutral)
+        : "—",
+    note: "相对行业均值的综合偏离",
+  },
+]);
+
+const timelineSteps = computed(() => {
+  if (!signal.value) return [];
+  return [
+    {
+      title: "价格结构",
+      value: `MA5 ${metrics.value.ma5 ?? "—"} / MA20 ${metrics.value.ma20 ?? "—"} / MA60 ${metrics.value.ma60 ?? "—"}`,
+      note: `20 日动量 ${formatPercent(metrics.value.momentum20 || 0, 2)}`,
+      tone: "trend",
+    },
+    {
+      title: "情绪与新闻",
+      value: `舆情 ${formatSigned(metrics.value.sentiment || 0)} · ${metrics.value.keywords?.slice(0, 2).join(" / ") || "暂无关键词"}`,
+      note: `最近映射新闻 ${data.value?.news?.length ?? 0} 条`,
+      tone: "news",
+    },
+    {
+      title: "热度与量能",
+      value: `量比 ${(metrics.value.volume_ratio || 0).toFixed(2)}x · 热度 Z ${(signal.value.burst || 0).toFixed(1)}`,
+      note: `量能得分 ${Math.round(signal.value.volume_score || 0)} · 今日提及 ${metrics.value.mentions_today ?? 0} 条`,
+      tone: "volume",
+    },
+    {
+      title: "综合结论",
+      value: `总分 ${Math.round(signal.value.total_score || 0)} · 研究上限 ${signal.value.research_weight_pct ?? 0}%`,
+      note: signal.value.status,
+      tone: "summary",
+    },
+  ];
+});
+
+const driverPanels = computed(() => {
+  if (!signal.value) return [];
+  return [
+    {
+      title: "趋势驱动",
+      score: signal.value.trend_score || 0,
+      tone: "trend",
+      neutralDelta: metrics.value.trend_score_neutral,
+      highlights: [
+        `MA5 / MA20 / MA60：${metrics.value.ma5 ?? "—"} / ${metrics.value.ma20 ?? "—"} / ${metrics.value.ma60 ?? "—"}`,
+        `20 日动量 ${formatPercent(metrics.value.momentum20 || 0, 2)}`,
+        `价格结构${metrics.value.bullish ? "已" : "未"}形成多头确认`,
+      ],
+    },
+    {
+      title: "舆情驱动",
+      score: signal.value.sentiment_score || 0,
+      tone: "news",
+      neutralDelta: metrics.value.sentiment_score_neutral,
+      highlights: [
+        `情绪值 ${formatSigned(metrics.value.sentiment || 0)}`,
+        `关键词 ${metrics.value.keywords?.slice(0, 3).join(" / ") || "暂无关键词"}`,
+        `关联新闻 ${data.value?.news?.length ?? 0} 条`,
+      ],
+    },
+    {
+      title: "量能与热度",
+      score: signal.value.volume_score || 0,
+      tone: "volume",
+      neutralDelta: metrics.value.volume_score_neutral,
+      highlights: [
+        `量比 ${(metrics.value.volume_ratio || 0).toFixed(2)}x`,
+        `热度 Z ${(signal.value.burst || 0).toFixed(1)}`,
+        `今日提及 ${metrics.value.mentions_today ?? 0} 条`,
+      ],
+    },
+  ];
+});
 
 async function load() {
   error.value = "";
@@ -33,22 +169,31 @@ watch(() => route.params.symbol, load);
         <p class="eyebrow">{{ data.stock.industry }} · {{ data.stock.symbol }}</p>
         <h1>{{ data.stock.name }}</h1>
       </div>
-      <div v-if="data.signal" class="detail-score">
-        <ScoreRing :value="data.signal.total_score" :size="72" />
+      <div v-if="signal" class="detail-score">
+        <ScoreRing :value="signal.total_score" :size="72" />
         <div>
           <span>综合评分</span>
-          <strong>{{ data.signal.status }}</strong>
+          <strong>{{ signal.status }}</strong>
           <small v-if="metrics.total_score_neutral !== undefined" style="display: block; font-size: 11px; margin-top: 4px; color: var(--muted)">
-            行业偏差: 
+            行业偏差:
             <span :class="{ positive: metrics.total_score_neutral > 0, negative: metrics.total_score_neutral < 0 }">
-              {{ metrics.total_score_neutral >= 0 ? '+' : '' }}{{ metrics.total_score_neutral.toFixed(2) }}
+              {{ metrics.total_score_neutral >= 0 ? "+" : "" }}{{ metrics.total_score_neutral.toFixed(2) }}
             </span>
           </small>
         </div>
       </div>
     </div>
 
-    <section class="detail-grid">
+    <DecisionSummaryCard
+      v-if="signal"
+      :stock="data.stock"
+      :signal="signal"
+      :summary="decisionSummary"
+      :dominant-driver="dominantDriver"
+      :highlights="summaryHighlights"
+    />
+
+    <section class="detail-grid detail-grid-expanded">
       <article class="panel chart-panel">
         <div class="panel-title">
           <div><p class="eyebrow">PRICE STRUCTURE</p><h2>价格与均线</h2></div>
@@ -59,78 +204,21 @@ watch(() => route.params.symbol, load);
         <PriceChart :prices="data.prices" />
       </article>
 
-      <aside class="panel factor-panel">
-        <p class="eyebrow">FACTOR SNAPSHOT</p>
-        <h2>因子快照</h2>
-        <div class="factor">
-          <span>趋势强度</span><b>{{ data.signal?.trend_score ?? "—" }}</b>
-          <i><i :style="{ width: `${data.signal?.trend_score || 0}%` }"></i></i>
-          <small v-if="metrics.trend_score_neutral !== undefined" style="font-size: 10px; color: var(--muted); margin-top: 4px; grid-column: 1 / -1">
-            行业偏差: 
-            <span :class="{ positive: metrics.trend_score_neutral > 0, negative: metrics.trend_score_neutral < 0 }">
-              {{ metrics.trend_score_neutral >= 0 ? '+' : '' }}{{ metrics.trend_score_neutral.toFixed(2) }}
-            </span>
-          </small>
-        </div>
-        <div class="factor">
-          <span>舆情得分</span><b>{{ data.signal?.sentiment_score ?? "—" }}</b>
-          <i><i :style="{ width: `${data.signal?.sentiment_score || 0}%` }"></i></i>
-          <small v-if="metrics.sentiment_score_neutral !== undefined" style="font-size: 10px; color: var(--muted); margin-top: 4px; grid-column: 1 / -1">
-            行业偏差: 
-            <span :class="{ positive: metrics.sentiment_score_neutral > 0, negative: metrics.sentiment_score_neutral < 0 }">
-              {{ metrics.sentiment_score_neutral >= 0 ? '+' : '' }}{{ metrics.sentiment_score_neutral.toFixed(2) }}
-            </span>
-          </small>
-        </div>
-        <div class="factor">
-          <span>量能得分</span><b>{{ data.signal?.volume_score ?? "—" }}</b>
-          <i><i :style="{ width: `${data.signal?.volume_score || 0}%` }"></i></i>
-          <small v-if="metrics.volume_score_neutral !== undefined" style="font-size: 10px; color: var(--muted); margin-top: 4px; grid-column: 1 / -1">
-            行业偏差: 
-            <span :class="{ positive: metrics.volume_score_neutral > 0, negative: metrics.volume_score_neutral < 0 }">
-              {{ metrics.volume_score_neutral >= 0 ? '+' : '' }}{{ metrics.volume_score_neutral.toFixed(2) }}
-            </span>
-          </small>
-        </div>
-        <dl>
-          <div><dt>MA 5 / 20 / 60</dt><dd>{{ metrics.ma5 }} / {{ metrics.ma20 }} / {{ metrics.ma60 }}</dd></div>
-          <div><dt>20日动量</dt><dd :class="{ positive: metrics.momentum20 > 0 }">{{ (metrics.momentum20 * 100).toFixed(2) }}%</dd></div>
-          <div><dt>量比</dt><dd>{{ metrics.volume_ratio }}×</dd></div>
-          <div><dt>新闻热度</dt><dd>{{ data.signal?.burst }}×</dd></div>
-          <div><dt>研究权重上限</dt><dd>{{ data.signal?.research_weight_pct ?? 0 }}%</dd></div>
-        </dl>
-      </aside>
+      <DecisionChainTimeline v-if="signal" :steps="timelineSteps" />
     </section>
 
-    <section class="panel news-panel">
-      <div class="panel-title">
-        <div><p class="eyebrow">INFORMATION FLOW</p><h2>近期信息流</h2></div>
-        <span class="news-count">{{ data.news.length }} 条</span>
-      </div>
-      <div class="news-list">
-        <article v-for="item in data.news" :key="item.published_at + item.title">
-          <time>{{ item.published_at.slice(5, 16).replace("T", " ") }}</time>
-          <div>
-            <h3>
-              <a
-                v-if="item.url"
-                :href="item.url"
-                target="_blank"
-                rel="noopener noreferrer"
-              >{{ item.title }} ↗</a>
-              <template v-else>{{ item.title }}</template>
-            </h3>
-            <p>
-              {{ item.source }} · {{ item.event_type }} ·
-              {{ item.keywords.join(" / ") || "未命中情绪词" }}
-            </p>
-            <p v-if="item.summary" class="news-summary">{{ item.summary }}</p>
-          </div>
-          <span class="news-score" :class="{ positive: item.sentiment > 0, negative: item.sentiment < 0 }">
-            {{ item.sentiment > 0 ? "+" : "" }}{{ item.sentiment.toFixed(2) }}
-          </span>
-        </article>
-      </div>
+    <section v-if="signal" class="driver-breakdown-grid">
+      <DriverBreakdownPanel
+        v-for="panel in driverPanels"
+        :key="panel.title"
+        :title="panel.title"
+        :score="panel.score"
+        :tone="panel.tone"
+        :highlights="panel.highlights"
+        :neutral-delta="panel.neutralDelta"
+      />
     </section>
+
+    <EvidenceFeed :items="data.news" />
   </template>
 </template>
