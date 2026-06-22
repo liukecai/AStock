@@ -123,9 +123,12 @@ def test_commodity_transmission_v2_flow(tmp_path):
             reaction_res = client.get(f"/api/events/{event_id}/reaction")
             assert reaction_res.status_code == 200
             reaction_data = reaction_res.json()
-            assert reaction_data["id"] == event_id
+            assert reaction_data["event"]["id"] == event_id
+            assert "commodity_impacts" in reaction_data
+            assert "v2_reaction_scores" in reaction_data
             assert "reactions" in reaction_data
             assert len(reaction_data["reactions"]) > 0
+            assert reaction_data["reactions"] == reaction_data["v2_reaction_scores"]
             assert "transmission_chain" in reaction_data["reactions"][0]
             assert "evidence" in reaction_data["reactions"][0]
 
@@ -135,8 +138,9 @@ def test_commodity_transmission_v2_flow(tmp_path):
             assert exposure_res.status_code == 200
             exposure_data = exposure_res.json()
             assert exposure_data["stock"]["symbol"] == "601857"
-            assert len(exposure_data["profiles"]) == 1
-            assert exposure_data["profiles"][0]["commodity"] == "oil"
+            assert len(exposure_data["commodity_profiles"]) == 1
+            assert exposure_data["commodity_profiles"] == exposure_data["profiles"]
+            assert exposure_data["commodity_profiles"][0]["commodity"] == "oil"
 
             # 404 Case
             assert client.get("/api/events/evt_invalid_v2/reaction").status_code == 404

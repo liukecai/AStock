@@ -211,7 +211,7 @@ def get_event_reactions_v2(event_id: str) -> dict[str, Any] | None:
         return None
 
     event_dict = dict(event)
-    event_dict["commodity_impacts"] = db.rows(
+    commodity_impacts = db.rows(
         "SELECT commodity, impact_type, direction FROM commodity_impacts WHERE event_id=?",
         (event_id,)
     )
@@ -233,8 +233,13 @@ def get_event_reactions_v2(event_id: str) -> dict[str, Any] | None:
         r_dict["transmission_chain"] = json.loads(r_dict["transmission_chain"])
         reactions_decoded.append(r_dict)
 
-    event_dict["reactions"] = reactions_decoded
-    return event_dict
+    return {
+        "event": event_dict,
+        "commodity_impacts": commodity_impacts,
+        "v2_reaction_scores": reactions_decoded,
+        # compatibility alias for earlier callers
+        "reactions": reactions_decoded,
+    }
 
 
 def get_stock_exposure_v2(symbol: str) -> dict[str, Any] | None:
@@ -254,5 +259,7 @@ def get_stock_exposure_v2(symbol: str) -> dict[str, Any] | None:
 
     return {
         "stock": dict(stock),
-        "profiles": [dict(p) for p in profiles]
+        "commodity_profiles": [dict(p) for p in profiles],
+        # compatibility alias for earlier callers
+        "profiles": [dict(p) for p in profiles],
     }
