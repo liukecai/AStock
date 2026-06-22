@@ -137,6 +137,20 @@ $$\text{Event Score} = 0.5 \times \text{Event Impact} + 0.3 \times \text{Sector 
 ### 3. 研究用途与投资风险免责声明
 **特别说明**：本系统所输出的因果传导方向及打分结果，属于基于确定性规则推理的量化因子工程验证，**不包含真实投资性行情预测，绝不构成任何投资建议或实盘操作指南**。投资有风险，入市需谨慎。
 
+### 4. 商品事件抽取 LLM 配置
+系统支持“LLM 优先抽取 + 规则回退”机制。开启后，将优先使用大语言模型进行商品事件识别与属性抽取；若提取失败、超时或格式不合法，系统将自动降级为基于关键词规则的事件识别。
+
+在环境配置文件 `.env` 中添加以下配置项：
+- `EVENT_LLM_ENABLED` (bool): 是否启用 LLM 商品事件抽取（默认为 `false`）。
+- `EVENT_LLM_BASE_URL` (string): 兼容 OpenAI 协议的 API 地址（默认为 SenseNova 接口 `https://token.sensenova.cn/v1`）。
+- `EVENT_LLM_API_KEY` (string): 接口 API Key。不配置或为空时将自动回退到规则识别。
+- `EVENT_LLM_MODEL` (string): 模型名称（默认为 `sensenova-6.7-flash-lite`）。
+- `EVENT_LLM_TIMEOUT_SECONDS` (float): 请求超时秒数（默认为 `10.0`）。
+
+> [!WARNING]
+> 请勿将真实的 API Key 提交到代码仓库中，推荐通过本地 `.env` 环境变量文件进行配置。
+
+
 
 ## 历史回测与参数校准
 

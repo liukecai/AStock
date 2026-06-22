@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from .. import db
+from .event_llm import extract_event_llm
 
 COMMODITY_KB = {
     "tungsten": {
@@ -195,6 +196,35 @@ def extract_intensity_confidence(title: str, summary: str) -> tuple[float, float
         confidence = 0.95
     return intensity, confidence
 
+
+def extract_event_rule_based(title: str, summary: str) -> dict[str, Any]:
+    commodity = identify_commodity(title + " " + summary)
+    if not commodity:
+        return {"is_relevant": False}
+        
+    source_text = title + " " + summary
+    event_classification = identify_event_type(source_text)
+    if not event_classification:
+        return {"is_relevant": False}
+        
+    event_type, subtype = event_classification
+    impact_type = identify_commodity_shock(source_text)
+    intensity, confidence = extract_intensity_confidence(title, summary)
+    direction = commodity_impact_direction(source_text, impact_type)
+    
+    return {
+        "is_relevant": True,
+        "commodity": commodity,
+        "event_type": event_type,
+        "subtype": subtype,
+        "impact_type": impact_type,
+        "direction": direction,
+        "intensity": intensity,
+        "confidence": confidence,
+        "rationale": "Rule-based keyword extraction"
+    }
+
+
 def analyze_event_text(
     title: str,
     summary: str = "",
@@ -204,18 +234,35 @@ def analyze_event_text(
     if not title:
         return None
         
-    commodity = identify_commodity(title + " " + summary)
-    if not commodity:
-        return None  # No relevant commodity event detected
-        
-    source_text = title + " " + summary
-    event_classification = identify_event_type(source_text)
-    if not event_classification:
+    extraction_source = "rule"
+    extraction_raw_output = "{}"
+    extracted = None
+    
+    try:
+        llm_res = extract_event_llm(title, summary)
+        if llm_res is not None:
+            extracted = llm_res
+            extraction_source = "llm"
+            extraction_raw_output = json.dumps(llm_res, ensure_ascii=False)
+    except Exception as e:
+        # Graceful fallback to rule-based logic
+        pass
+
+    if extracted is None:
+        extracted = extract_event_rule_based(title, summary)
+        extraction_source = "rule"
+        extraction_raw_output = json.dumps(extracted, ensure_ascii=False)
+
+    if not extracted.get("is_relevant"):
         return None
-    event_type, subtype = event_classification
-    impact_type = identify_commodity_shock(source_text)
-    intensity, confidence = extract_intensity_confidence(title, summary)
-    direction = commodity_impact_direction(source_text, impact_type)
+
+    commodity = extracted["commodity"]
+    event_type = extracted["event_type"]
+    subtype = extracted["subtype"]
+    impact_type = extracted["impact_type"]
+    direction = extracted["direction"]
+    intensity = extracted["intensity"]
+    confidence = extracted["confidence"]
     
     if not published_at:
         published_at = datetime.now().isoformat()
@@ -230,8 +277,9 @@ def analyze_event_text(
             """
             INSERT INTO events(
                 id, news_id, title, summary, event_type, subtype,
-                intensity, direction, confidence, published_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                intensity, direction, confidence, published_at, created_at,
+                extraction_source, extraction_raw_output
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 news_id=excluded.news_id,
                 title=excluded.title,
@@ -242,7 +290,9 @@ def analyze_event_text(
                 direction=excluded.direction,
                 confidence=excluded.confidence,
                 published_at=excluded.published_at,
-                created_at=excluded.created_at
+                created_at=excluded.created_at,
+                extraction_source=excluded.extraction_source,
+                extraction_raw_output=excluded.extraction_raw_output
             """,
             (
                 event_id,
@@ -255,7 +305,9 @@ def analyze_event_text(
                 direction,
                 confidence,
                 published_at,
-                datetime.now().isoformat()
+                datetime.now().isoformat(),
+                extraction_source,
+                extraction_raw_output
             )
         )
         conn.execute("DELETE FROM commodity_impacts WHERE event_id=?", (event_id,))
@@ -355,8 +407,9 @@ def analyze_event_text(
             "sector": industry
         }
         
+        source_label = "LLM 优先抽取" if extraction_source == "llm" else "规则回退"
         evidence = (
-            f"新闻事件《{title}》识别为 {kb['name']} 行业的 {impact_type} 冲击。 "
+            f"新闻事件《{title}》（来源：{source_label}）识别为 {kb['name']} 行业的 {impact_type} 冲击。 "
             f"该股票属于 {industry} 行业（通过 {exposure_type} 映射，属于 {relationship} 环节）。"
             f"计算分解：Event Score = 0.5 * Event Impact ({event_impact}) + 0.3 * Sector Exposure ({sector_exposure}) + 0.2 * Trend Strength ({trend_strength}) = {event_score}。 "
             f"影响方向：{'受益 (benefit)' if stock_direction == 'benefit' else '受损 (harm)'}。"

@@ -120,6 +120,22 @@ class Settings:
     akshare_workers: int = field(
         default_factory=lambda: int(os.getenv("AKSHARE_WORKERS", "3"))
     )
+    event_llm_enabled: bool = field(
+        default_factory=lambda: _as_bool(os.getenv("EVENT_LLM_ENABLED"), False)
+    )
+    event_llm_base_url: str = field(
+        default_factory=lambda: os.getenv("EVENT_LLM_BASE_URL", "https://token.sensenova.cn/v1").rstrip("/")
+    )
+    event_llm_api_key: str | None = field(
+        default_factory=lambda: os.getenv("EVENT_LLM_API_KEY")
+    )
+    event_llm_model: str = field(
+        default_factory=lambda: os.getenv("EVENT_LLM_MODEL", "sensenova-6.7-flash-lite")
+    )
+    event_llm_timeout_seconds: float = field(
+        default_factory=lambda: float(os.getenv("EVENT_LLM_TIMEOUT_SECONDS", "10.0"))
+    )
 
 
 settings = Settings()
+

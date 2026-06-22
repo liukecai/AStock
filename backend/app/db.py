@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS events (
     confidence REAL NOT NULL DEFAULT 1.0,
     published_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    extraction_source TEXT NOT NULL DEFAULT 'rule',
+    extraction_raw_output TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY(news_id) REFERENCES news_items(id) ON DELETE SET NULL
 );
 
@@ -212,6 +214,17 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE news_items ADD COLUMN model_raw_output TEXT NOT NULL "
                 "DEFAULT '{}'"
+            )
+        event_columns = {
+            item["name"] for item in conn.execute("PRAGMA table_info(events)")
+        }
+        if "extraction_source" not in event_columns:
+            conn.execute(
+                "ALTER TABLE events ADD COLUMN extraction_source TEXT NOT NULL DEFAULT 'rule'"
+            )
+        if "extraction_raw_output" not in event_columns:
+            conn.execute(
+                "ALTER TABLE events ADD COLUMN extraction_raw_output TEXT NOT NULL DEFAULT '{}'"
             )
         # Migration from the old news table to the unified news data layer if it exists
         old_table_exists = conn.execute(
