@@ -45,7 +45,7 @@ flowchart LR
         RSS["RSS 解析器"]
     end
 
-    subgraph Data["SQLite 数据层"]
+    subgraph Data["数据持久化层 (PostgreSQL / SQLite)"]
         Stocks["stocks"]
         Prices["daily_prices"]
         News["news_items"]
@@ -121,6 +121,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `aquant-api` | FastAPI、调度、采集、因子计算 | `8000` | 否 |
 | `aquant-rsshub` | 将国内外站点转换为 RSS | `1200` | 否 |
+| `aquant-postgres` | 生产级元数据库（PostgreSQL 16） | `5432` | 否 |
 | `aquant-web` | Vue 静态页面与 Nginx API 代理 | `80` | 通过外部反向代理 |
 
 ### 3.3 本地模型节点容器
@@ -135,7 +136,7 @@ flowchart LR
     Proxy --> Web["aquant-web :80"]
     Web --> API["aquant-api :8000"]
     API --> RSSHub["aquant-rsshub :1200"]
-    API --> DB[("SQLite Volume")]
+    API --> DB[("PostgreSQL / SQLite")]
 
     subgraph cloud["云服务器"]
         Web
@@ -155,7 +156,7 @@ flowchart LR
 
 - API、RSSHub 不直接开放公网端口；
 - Web 容器加入外部反向代理网络；
-- SQLite 文件存放在 Docker Volume；
+- PostgreSQL 数据及 SQLite 备份文件存放在持久化 Docker Volume；
 - 容器设置自动重启；
 - API 和 Web 均配置健康检查；
 - RSSHub 单源故障不会导致整个新闻任务失败；
@@ -170,7 +171,7 @@ AStock/
 │   │   ├── main.py                 # 应用生命周期和调度
 │   │   ├── api.py                  # REST API
 │   │   ├── config.py               # 环境配置
-│   │   ├── db.py                   # SQLite Schema 与数据访问
+│   │   ├── db.py                   # SQLite/PostgreSQL 双持久化层数据访问
 │   │   ├── schemas.py              # StockBar / NewsEvent 标准 Schema
 │   │   └── services/
 │   │       ├── market.py           # AKShare 行情采集
@@ -793,7 +794,7 @@ TotalScore =
 - [x] 2. **[最高优先级] 构建历史回测框架**：基于已有 `signals` + `daily_prices` Parquet，计算因子 IC、五分位分层收益、Sharpe 和最大回撤，并纳入涨跌停约束（无法成交信号排除）；
 - [x] 3. **[高优先级] 保存 NLP 模型版本与推理证据**：在 `news_items` 表增加 `model_version`、`score_source`（`model` / `rule`）、`model_raw_output` 字段，支持回测期间情绪因子可审计；
 - [x] 4. 根据回测 IC 结果重新校准因子权重及研究权重阈值（已实现自动校准与最小样本保护；当前样例数据不足，保留默认参数直至积累至少 20 个有效截面和 100 条可执行交易）；
-- [ ] 5. **[条件触发] 将 SQLite 元数据升级为 PostgreSQL，Parquet 迁移到对象存储**（触发条件：股票池扩展至全 A 股且出现并发写入性能瓶颈）。
+- [x] 5. **将 SQLite 元数据升级为 PostgreSQL**（V2 版本完成，支持双持久化后端及一键数据迁移，并增加了可视化任务控制与告警中心）。
 
 ### 长期（前置：回测验证有有效 alpha）
 
