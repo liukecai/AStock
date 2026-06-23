@@ -4,9 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app ./app
+COPY backend/app ./app
 # Commodity knowledge graph YAML configs — embedded in image for stability.
 # Override by mounting a host volume to /app/config if hot-reload is needed.
 COPY config ./config
