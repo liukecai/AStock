@@ -194,7 +194,8 @@ def rescore_cninfo_announcements() -> dict[str, int]:
             )
         )
     with db.connect() as conn:
-        conn.executemany(
+        db._execmany(
+            conn,
             """
             UPDATE news_items
             SET sentiment=?, model_version=?, score_source=?,

@@ -9,10 +9,12 @@ from app.services.backup import backup_db
 
 
 def test_database_backup_and_rotation(tmp_path):
+    original_url = settings.database_url
     original_path = settings.database_path
     original_data_dir = settings.data_dir
 
     # Modify settings in place
+    object.__setattr__(settings, "database_url", None)
     object.__setattr__(settings, "database_path", tmp_path / "aquant.db")
     object.__setattr__(settings, "data_dir", tmp_path)
 
@@ -42,5 +44,6 @@ def test_database_backup_and_rotation(tmp_path):
         assert len(current_backups) == 7
 
     finally:
+        object.__setattr__(settings, "database_url", original_url)
         object.__setattr__(settings, "database_path", original_path)
         object.__setattr__(settings, "data_dir", original_data_dir)

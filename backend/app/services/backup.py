@@ -10,6 +10,10 @@ from ..config import settings
 
 def backup_db() -> str:
     """Perform atomic online backup of the active SQLite database and keep last 7 files."""
+    if settings.database_url:
+        print("[BACKUP INFO] Using PostgreSQL backend; skipping local SQLite backup.")
+        return ""
+
     try:
         backup_dir = settings.data_dir / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)

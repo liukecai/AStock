@@ -15,8 +15,8 @@ def calculate_v2_transmission(event_id: str) -> None:
     """
     # 1. Clear existing V2 rows for this event to keep it idempotent
     with db.connect() as conn:
-        conn.execute("DELETE FROM event_earnings_impacts WHERE event_id=?", (event_id,))
-        conn.execute("DELETE FROM event_stock_reaction_scores_v2 WHERE event_id=?", (event_id,))
+        db._exec(conn, "DELETE FROM event_earnings_impacts WHERE event_id=?", (event_id,))
+        db._exec(conn, "DELETE FROM event_stock_reaction_scores_v2 WHERE event_id=?", (event_id,))
 
     # 2. Get event
     event = db.row("SELECT * FROM events WHERE id=?", (event_id,))
@@ -173,7 +173,8 @@ def calculate_v2_transmission(event_id: str) -> None:
             )
 
             with db.connect() as conn:
-                conn.execute(
+                db._exec(
+                    conn,
                     """
                     INSERT INTO event_earnings_impacts (
                         event_id, symbol, commodity, revenue_impact_score, margin_impact_score,
@@ -186,7 +187,8 @@ def calculate_v2_transmission(event_id: str) -> None:
                     )
                 )
 
-                conn.execute(
+                db._exec(
+                    conn,
                     """
                     INSERT INTO event_stock_reaction_scores_v2 (
                         event_id, symbol, commodity, shock_score, exposure_score,

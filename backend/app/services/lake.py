@@ -40,7 +40,8 @@ def export_parquet_snapshots(names: tuple[str, ...] | None = None) -> dict[str, 
     root = Path(settings.data_dir) / "parquet"
     root.mkdir(parents=True, exist_ok=True)
     result: dict[str, int] = {}
-    with sqlite3.connect(settings.database_path) as conn:
+    from .. import db
+    with db.connect() as conn:
         for name in selected:
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)

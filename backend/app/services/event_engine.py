@@ -309,9 +309,9 @@ def analyze_event_text(
     h = hashlib.md5(f"{title}-{published_at}".encode("utf-8")).hexdigest()
     event_id = f"evt_{h[:16]}"
     
-    # Upsert the event and replace derived rows so repeated analysis/rebuild is idempotent.
     with db.connect() as conn:
-        conn.execute(
+        db._exec(
+            conn,
             """
             INSERT INTO events(
                 id, news_id, title, summary, event_type, subtype,
@@ -348,9 +348,10 @@ def analyze_event_text(
                 extraction_raw_output
             )
         )
-        conn.execute("DELETE FROM commodity_impacts WHERE event_id=?", (event_id,))
-        conn.execute("DELETE FROM event_stock_scores WHERE event_id=?", (event_id,))
-        conn.execute(
+        db._exec(conn, "DELETE FROM commodity_impacts WHERE event_id=?", (event_id,))
+        db._exec(conn, "DELETE FROM event_stock_scores WHERE event_id=?", (event_id,))
+        db._exec(
+            conn,
             """
             INSERT INTO commodity_impacts(event_id, commodity, impact_type, direction)
             VALUES (?, ?, ?, ?)
@@ -468,14 +469,23 @@ def analyze_event_text(
         })
         
     with db.connect() as conn:
-        for item in stock_scores_to_save:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO event_stock_scores(
-                    event_id, symbol, event_score, event_impact, sector_exposure,
-                    trend_strength, direction, causal_chain, evidence
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+        db._execmany(
+            conn,
+            """
+            INSERT INTO event_stock_scores(
+                event_id, symbol, event_score, event_impact, sector_exposure,
+                trend_strength, direction, causal_chain, evidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(event_id, symbol) DO UPDATE SET
+                event_score=excluded.event_score,
+                event_impact=excluded.event_impact,
+                sector_exposure=excluded.sector_exposure,
+                trend_strength=excluded.trend_strength,
+                direction=excluded.direction,
+                causal_chain=excluded.causal_chain,
+                evidence=excluded.evidence
+            """,
+            [
                 (
                     item["event_id"],
                     item["symbol"],
@@ -487,7 +497,9 @@ def analyze_event_text(
                     item["causal_chain"],
                     item["evidence"]
                 )
-            )
+                for item in stock_scores_to_save
+            ]
+        )
             
     # V2 transmission scoring integration (failures must not block V1)
     try:

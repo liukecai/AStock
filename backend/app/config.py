@@ -23,6 +23,11 @@ def _json_env(name: str) -> object | None:
 class Settings:
     app_name: str = "A-Quant Insight"
     app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development"))
+    # When DATABASE_URL is set (PostgreSQL DSN), the PG backend is used.
+    # When unset or empty, the legacy SQLite backend is used.
+    database_url: str | None = field(
+        default_factory=lambda: os.getenv("DATABASE_URL") or None
+    )
     database_path: Path = field(
         default_factory=lambda: Path(os.getenv("DATABASE_PATH", "./data/aquant.db"))
     )

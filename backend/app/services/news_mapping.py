@@ -67,7 +67,8 @@ def sync_stock_aliases() -> int:
         if symbol in symbols:
             rows.append((alias, symbol, "en", 0.95))
     with db.connect() as conn:
-        conn.executemany(
+        db._execmany(
+            conn,
             """
             INSERT INTO stock_aliases(alias, symbol, language, confidence)
             VALUES (?, ?, ?, ?)
