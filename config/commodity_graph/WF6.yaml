@@ -1,0 +1,59 @@
+commodity: WF6
+name: 六氟化钨
+
+# ── 关键词识别 ──────────────────────────────────────────────
+# 注意：WF6 识别优先于 tungsten，避免"六氟化钨"中的"钨"字被误归类
+keywords:
+  - 六氟化钨
+  - WF6
+  - 中船特气
+  - 特气
+  - 电子气体
+
+sector_keywords:
+  - 电子化学品
+  - 特种气体
+  - 化学制品
+  - 半导体材料
+
+default_sector: 电子化学品
+
+upstream_sectors:
+  - 电子化学品
+  - 特种气体
+  - 化学制品
+
+downstream_sectors:
+  - 半导体
+  - 电子
+  - 半导体材料
+
+# ── 精确股票映射 ─────────────────────────────────────────────
+exact_stocks:
+  "688146":
+    relationship: upstream
+    name: 中船特气
+
+# ── 行业-板块系数映射 ─────────────────────────────────────────
+sector_mappings:
+  - sector: 电子化学品
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 特种气体
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 化学制品
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 半导体
+    relationship: downstream
+    coefficient: -0.6
+
+# ── 行业-股票敞口 ─────────────────────────────────────────────
+sector_exposures:
+  - sector: 电子化学品
+    symbol: "688146"
+    exposure: 100.0
+
+# ── 公司商品画像（WF6 暂无 V2 画像，留空供后续补充）───────────
+company_profiles: []

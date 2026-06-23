@@ -8,3 +8,4 @@ pytest==8.3.5
 akshare==1.18.64
 feedparser==6.0.12
 pyarrow==20.0.0
+pyyaml>=6.0

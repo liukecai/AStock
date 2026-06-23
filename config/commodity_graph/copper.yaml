@@ -1,0 +1,116 @@
+commodity: copper
+name: 铜
+
+# ── 关键词识别 ──────────────────────────────────────────────
+keywords:
+  - 铜
+  - copper
+  - 铜价
+  - 精炼铜
+  - 电解铜
+
+sector_keywords:
+  - 有色金属
+  - 铜
+  - 铜业
+  - 电力设备
+
+default_sector: 有色金属
+
+upstream_sectors:
+  - 有色金属
+  - 铜
+  - 铜业
+
+downstream_sectors:
+  - 电力设备
+
+# ── 精确股票映射 ─────────────────────────────────────────────
+exact_stocks:
+  "600362":
+    relationship: upstream
+    name: 江西铜业
+  "601899":
+    relationship: upstream
+    name: 紫金矿业
+  "000878":
+    relationship: upstream
+    name: 云南铜业
+
+# ── 行业-板块系数映射 ─────────────────────────────────────────
+sector_mappings:
+  - sector: 有色金属
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 铜
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 电力设备
+    relationship: downstream
+    coefficient: -0.5
+
+# ── 行业-股票敞口 ─────────────────────────────────────────────
+sector_exposures:
+  - sector: 有色金属
+    symbol: "600362"
+    exposure: 100.0
+  - sector: 有色金属
+    symbol: "601899"
+    exposure: 100.0
+  - sector: 有色金属
+    symbol: "000878"
+    exposure: 100.0
+
+# ── 公司商品画像 ─────────────────────────────────────────────
+company_profiles:
+  - symbol: "600362"
+    role: upstream_resource
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 85.0
+    pricing_power: 70.0
+    inventory_sensitivity: 60.0
+    pass_through_ability: 75.0
+    earnings_elasticity: 80.0
+    lag_days: 0
+    evidence: 江西铜业为大型铜矿开采及冶炼企业，属于铜行业上游，受益于铜价上涨
+
+  - symbol: "601899"
+    role: upstream_resource
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 80.0
+    pricing_power: 80.0
+    inventory_sensitivity: 50.0
+    pass_through_ability: 70.0
+    earnings_elasticity: 85.0
+    lag_days: 0
+    evidence: 紫金矿业为综合性矿业龙头，铜资源储量丰富，受益于铜价上涨
+
+  - symbol: "000878"
+    role: upstream_resource
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 80.0
+    pricing_power: 65.0
+    inventory_sensitivity: 60.0
+    pass_through_ability: 70.0
+    earnings_elasticity: 75.0
+    lag_days: 0
+    evidence: 云南铜业主营铜矿开采及冶炼，属于铜行业上游，受益于铜价上涨
+
+  - symbol: "300274"
+    role: downstream_manufacturing
+    channel: cost
+    benefit_when_price_up: false
+    benefit_when_price_down: true
+    exposure_strength: 60.0
+    pricing_power: 75.0
+    inventory_sensitivity: 50.0
+    pass_through_ability: 70.0
+    earnings_elasticity: 55.0
+    lag_days: 20
+    evidence: 阳光电源主要产品为光伏逆变器等，铜是重要铜排和电缆等材料成本，受益于铜价下跌

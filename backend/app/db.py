@@ -215,6 +215,136 @@ CREATE TABLE IF NOT EXISTS event_stock_reaction_scores_v2 (
 );
 """
 
+def _seed_commodity_graph(conn: sqlite3.Connection) -> None:
+    """
+    Seed commodity_sector_mappings, sector_stock_exposures, and
+    company_commodity_profiles from YAML config files.
+    Falls back to hardcoded data if YAML loading is unavailable.
+    Uses INSERT OR IGNORE so repeated calls are idempotent.
+    """
+    import sys as _sys
+
+    # Try YAML-based loading first
+    try:
+        from .services.commodity_loader import load_commodity_kb
+        kb = load_commodity_kb()
+    except Exception as exc:
+        print(f"[db._seed_commodity_graph] YAML 加载失败，使用硬编码数据: {exc}", file=_sys.stderr)
+        kb = {}
+
+    if kb:
+        # ── sector mappings ──
+        mappings = [
+            (m["commodity"], m["sector"], m["relationship"], m["coefficient"])
+            for comm_data in kb.values()
+            for m in comm_data.get("_sector_mappings", [])
+        ]
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO commodity_sector_mappings(
+              commodity, sector, relationship, coefficient
+            ) VALUES (?, ?, ?, ?)
+            """,
+            mappings,
+        )
+        # ── sector exposures ──
+        exposures = [
+            (e["sector"], e["symbol"], e["exposure"])
+            for comm_data in kb.values()
+            for e in comm_data.get("_sector_exposures", [])
+        ]
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO sector_stock_exposures(
+              sector, symbol, exposure
+            ) VALUES (?, ?, ?)
+            """,
+            exposures,
+        )
+        # ── company profiles ──
+        now_str = datetime.now().isoformat()
+        profiles = [
+            (
+                p["symbol"], p["commodity"], p["role"], p["channel"],
+                p["benefit_when_price_up"], p["benefit_when_price_down"],
+                p["exposure_strength"], p["pricing_power"],
+                p["inventory_sensitivity"], p["pass_through_ability"],
+                p["earnings_elasticity"], p["lag_days"],
+                p["evidence"], now_str,
+            )
+            for comm_data in kb.values()
+            for p in comm_data.get("_company_profiles", [])
+        ]
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO company_commodity_profiles(
+                symbol, commodity, role, channel, benefit_when_price_up, benefit_when_price_down,
+                exposure_strength, pricing_power, inventory_sensitivity, pass_through_ability,
+                earnings_elasticity, lag_days, evidence, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            profiles,
+        )
+        print(
+            f"[db] 已从 YAML 加载商品知识库：{len(mappings)} 条板块映射、"
+            f"{len(exposures)} 条股票敞口、{len(profiles)} 条公司画像。",
+            file=_sys.stderr,
+        )
+        return
+
+    # ── Hardcoded fallback ──
+    print("[db] 使用硬编码商品知识库（YAML 未加载）。", file=_sys.stderr)
+    default_mappings = [
+        ("tungsten", "有色金属", "upstream", 1.0), ("tungsten", "小金属", "upstream", 1.0),
+        ("tungsten", "硬质合金", "downstream", -0.8), ("WF6", "电子化学品", "upstream", 1.0),
+        ("WF6", "特种气体", "upstream", 1.0), ("WF6", "化学制品", "upstream", 1.0),
+        ("WF6", "半导体", "downstream", -0.6), ("oil", "石油石化", "upstream", 1.0),
+        ("oil", "采掘服务", "upstream", 1.0), ("oil", "化工", "downstream", -0.7),
+        ("oil", "航空机场", "downstream", -0.9), ("copper", "有色金属", "upstream", 1.0),
+        ("copper", "铜", "upstream", 1.0), ("copper", "电力设备", "downstream", -0.5),
+        ("gold", "贵金属", "upstream", 1.0), ("gold", "黄金", "upstream", 1.0),
+        ("lithium", "能源金属", "upstream", 1.0), ("lithium", "电池材料", "upstream", 1.0),
+        ("lithium", "锂电池", "downstream", -0.8), ("lithium", "汽车", "downstream", -0.6),
+    ]
+    conn.executemany(
+        "INSERT OR IGNORE INTO commodity_sector_mappings(commodity, sector, relationship, coefficient) VALUES (?, ?, ?, ?)",
+        default_mappings,
+    )
+    default_exposures = [
+        ("有色金属", "000657", 100.0), ("有色金属", "600549", 100.0), ("有色金属", "603993", 100.0),
+        ("电子化学品", "688146", 100.0), ("石油石化", "601857", 100.0), ("石油石化", "600028", 100.0),
+        ("采掘服务", "601808", 100.0), ("有色金属", "600362", 100.0), ("有色金属", "601899", 100.0),
+        ("有色金属", "000878", 100.0), ("贵金属", "600547", 100.0), ("贵金属", "600489", 100.0),
+        ("贵金属", "600988", 100.0), ("能源金属", "002466", 100.0), ("能源金属", "002460", 100.0),
+        ("能源金属", "000792", 100.0),
+    ]
+    conn.executemany(
+        "INSERT OR IGNORE INTO sector_stock_exposures(sector, symbol, exposure) VALUES (?, ?, ?)",
+        default_exposures,
+    )
+    now_str = datetime.now().isoformat()
+    default_profiles = [
+        ("601857", "oil", "upstream_resource", "revenue", 1, 0, 80.0, 80.0, 50.0, 60.0, 85.0, 0, "中国石油为原油开采上游企业，受益于原油价格上涨", now_str),
+        ("600028", "oil", "midstream_processing", "spread", 1, 1, 70.0, 60.0, 70.0, 65.0, 60.0, 5, "中国石化主营炼油与化工，为中游加工环节，受益于原油价格波动带来的价差空间", now_str),
+        ("601808", "oil", "upstream_service", "revenue", 1, 0, 75.0, 70.0, 30.0, 50.0, 70.0, 30, "中海油服提供油气田服务，属于上游服务环节，价格上涨传导至资本开支有一定滞后", now_str),
+        ("601111", "oil", "transport", "cost", 0, 1, 85.0, 40.0, 40.0, 50.0, 80.0, 7, "航空企业，燃油为主要成本支出，受益于原油价格下跌", now_str),
+        ("002466", "lithium", "upstream_resource", "revenue", 1, 0, 90.0, 80.0, 60.0, 70.0, 90.0, 0, "天齐锂业拥有优质锂资源，属于锂行业上游矿企，受益于锂价上涨", now_str),
+        ("002460", "lithium", "upstream_resource", "revenue", 1, 0, 85.0, 75.0, 65.0, 70.0, 85.0, 0, "赣锋锂业为锂盐及资源开发巨头，属于上游企业，受益于锂价上涨", now_str),
+        ("000792", "lithium", "upstream_resource", "revenue", 1, 0, 80.0, 70.0, 50.0, 60.0, 80.0, 0, "盐湖股份拥有盐湖锂资源，属于锂行业上游，受益于锂价上涨", now_str),
+        ("300750", "lithium", "downstream_manufacturing", "cost", 0, 1, 75.0, 85.0, 60.0, 80.0, 70.0, 15, "宁德时代为动力电池制造商，锂是其重要原材料成本，受益于锂价下跌", now_str),
+        ("600362", "copper", "upstream_resource", "revenue", 1, 0, 85.0, 70.0, 60.0, 75.0, 80.0, 0, "江西铜业为大型铜矿开采及冶炼企业，属于铜行业上游，受益于铜价上涨", now_str),
+        ("601899", "copper", "upstream_resource", "revenue", 1, 0, 80.0, 80.0, 50.0, 70.0, 85.0, 0, "紫金矿业为综合性矿业龙头，铜资源储量丰富，受益于铜价上涨", now_str),
+        ("000878", "copper", "upstream_resource", "revenue", 1, 0, 80.0, 65.0, 60.0, 70.0, 75.0, 0, "云南铜业主营铜矿开采及冶炼，属于铜行业上游，受益于铜价上涨", now_str),
+        ("300274", "copper", "downstream_manufacturing", "cost", 0, 1, 60.0, 75.0, 50.0, 70.0, 55.0, 20, "阳光电源主要产品为光伏逆变器等，铜是重要铜排和电缆等材料成本，受益于铜价下跌", now_str),
+    ]
+    conn.executemany(
+        """INSERT OR IGNORE INTO company_commodity_profiles(
+            symbol, commodity, role, channel, benefit_when_price_up, benefit_when_price_down,
+            exposure_strength, pricing_power, inventory_sensitivity, pass_through_ability,
+            earnings_elasticity, lag_days, evidence, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        default_profiles,
+    )
 
 
 def _db_path() -> Path:
@@ -361,93 +491,9 @@ def init_db() -> None:
             conn.execute("DROP TABLE IF EXISTS news")
             conn.execute("DROP INDEX IF EXISTS idx_news_symbol_date")
 
-        # Seeding static mappings and exposures for events
-        default_mappings = [
-            ("tungsten", "有色金属", "upstream", 1.0),
-            ("tungsten", "小金属", "upstream", 1.0),
-            ("tungsten", "硬质合金", "downstream", -0.8),
-            ("WF6", "电子化学品", "upstream", 1.0),
-            ("WF6", "特种气体", "upstream", 1.0),
-            ("WF6", "化学制品", "upstream", 1.0),
-            ("WF6", "半导体", "downstream", -0.6),
-            ("oil", "石油石化", "upstream", 1.0),
-            ("oil", "采掘服务", "upstream", 1.0),
-            ("oil", "化工", "downstream", -0.7),
-            ("oil", "航空机场", "downstream", -0.9),
-            ("copper", "有色金属", "upstream", 1.0),
-            ("copper", "铜", "upstream", 1.0),
-            ("copper", "电力设备", "downstream", -0.5),
-            ("gold", "贵金属", "upstream", 1.0),
-            ("gold", "黄金", "upstream", 1.0),
-            ("lithium", "能源金属", "upstream", 1.0),
-            ("lithium", "电池材料", "upstream", 1.0),
-            ("lithium", "锂电池", "downstream", -0.8),
-            ("lithium", "汽车", "downstream", -0.6),
-        ]
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO commodity_sector_mappings(
-              commodity, sector, relationship, coefficient
-            ) VALUES (?, ?, ?, ?)
-            """,
-            default_mappings,
-        )
-
-        default_exposures = [
-            ("有色金属", "000657", 100.0),
-            ("有色金属", "600549", 100.0),
-            ("有色金属", "603993", 100.0),
-            ("电子化学品", "688146", 100.0),
-            ("石油石化", "601857", 100.0),
-            ("石油石化", "600028", 100.0),
-            ("采掘服务", "601808", 100.0),
-            ("有色金属", "600362", 100.0),
-            ("有色金属", "601899", 100.0),
-            ("有色金属", "000878", 100.0),
-            ("贵金属", "600547", 100.0),
-            ("贵金属", "600489", 100.0),
-            ("贵金属", "600988", 100.0),
-            ("能源金属", "002466", 100.0),
-            ("能源金属", "002460", 100.0),
-            ("能源金属", "000792", 100.0),
-        ]
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO sector_stock_exposures(
-              sector, symbol, exposure
-            ) VALUES (?, ?, ?)
-            """,
-            default_exposures,
-        )
-
-        now_str = datetime.now().isoformat()
-        default_profiles = [
-            # Oil
-            ("601857", "oil", "upstream_resource", "revenue", 1, 0, 80.0, 80.0, 50.0, 60.0, 85.0, 0, "中国石油为原油开采上游企业，受益于原油价格上涨", now_str),
-            ("600028", "oil", "midstream_processing", "spread", 1, 1, 70.0, 60.0, 70.0, 65.0, 60.0, 5, "中国石化主营炼油与化工，为中游加工环节，受益于原油价格波动带来的价差空间", now_str),
-            ("601808", "oil", "upstream_service", "revenue", 1, 0, 75.0, 70.0, 30.0, 50.0, 70.0, 30, "中海油服提供油气田服务，属于上游服务环节，价格上涨传导至资本开支有一定滞后", now_str),
-            ("601111", "oil", "transport", "cost", 0, 1, 85.0, 40.0, 40.0, 50.0, 80.0, 7, "航空企业，燃油为主要成本支出，受益于原油价格下跌", now_str),
-            # Lithium
-            ("002466", "lithium", "upstream_resource", "revenue", 1, 0, 90.0, 80.0, 60.0, 70.0, 90.0, 0, "天齐锂业拥有优质锂资源，属于锂行业上游矿企，受益于锂价上涨", now_str),
-            ("002460", "lithium", "upstream_resource", "revenue", 1, 0, 85.0, 75.0, 65.0, 70.0, 85.0, 0, "赣锋锂业为锂盐及资源开发巨头，属于上游企业，受益于锂价上涨", now_str),
-            ("000792", "lithium", "upstream_resource", "revenue", 1, 0, 80.0, 70.0, 50.0, 60.0, 80.0, 0, "盐湖股份拥有盐湖锂资源，属于锂行业上游，受益于锂价上涨", now_str),
-            ("300750", "lithium", "downstream_manufacturing", "cost", 0, 1, 75.0, 85.0, 60.0, 80.0, 70.0, 15, "宁德时代为动力电池制造商，锂是其重要原材料成本，受益于锂价下跌", now_str),
-            # Copper
-            ("600362", "copper", "upstream_resource", "revenue", 1, 0, 85.0, 70.0, 60.0, 75.0, 80.0, 0, "江西铜业为大型铜矿开采及冶炼企业，属于铜行业上游，受益于铜价上涨", now_str),
-            ("601899", "copper", "upstream_resource", "revenue", 1, 0, 80.0, 80.0, 50.0, 70.0, 85.0, 0, "紫金矿业为综合性矿业龙头，铜资源储量丰富，受益于铜价上涨", now_str),
-            ("000878", "copper", "upstream_resource", "revenue", 1, 0, 80.0, 65.0, 60.0, 70.0, 75.0, 0, "云南铜业主营铜矿开采及冶炼，属于铜行业上游，受益于铜价上涨", now_str),
-            ("300274", "copper", "downstream_manufacturing", "cost", 0, 1, 60.0, 75.0, 50.0, 70.0, 55.0, 20, "阳光电源主要产品为光伏逆变器等，铜是重要铜排和电缆等材料成本，受益于铜价下跌", now_str),
-        ]
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO company_commodity_profiles(
-                symbol, commodity, role, channel, benefit_when_price_up, benefit_when_price_down,
-                exposure_strength, pricing_power, inventory_sensitivity, pass_through_ability,
-                earnings_elasticity, lag_days, evidence, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            default_profiles,
-        )
+        # Seeding static mappings and exposures for events.
+        # Prefer YAML-based commodity knowledge graph; fall back to hardcoded data.
+        _seed_commodity_graph(conn)
 
 
 

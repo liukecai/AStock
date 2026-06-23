@@ -1,0 +1,127 @@
+commodity: oil
+name: 原油/石油
+
+# ── 关键词识别 ──────────────────────────────────────────────
+keywords:
+  - 原油
+  - 石油
+  - oil
+  - opec
+  - 欧佩克
+  - 油价
+  - 布伦特
+  - 汽油
+  - 柴油
+
+sector_keywords:
+  - 石油石化
+  - 采掘服务
+  - 油气开采
+  - 化工
+  - 航空机场
+
+default_sector: 石油石化
+
+upstream_sectors:
+  - 石油石化
+  - 采掘服务
+  - 油气开采
+
+downstream_sectors:
+  - 化工
+  - 航空机场
+  - 航空
+  - 机场
+
+# ── 精确股票映射 ─────────────────────────────────────────────
+exact_stocks:
+  "601857":
+    relationship: upstream
+    name: 中国石油
+  "600028":
+    relationship: upstream
+    name: 中国石化
+  "601808":
+    relationship: upstream
+    name: 中海油服
+
+# ── 行业-板块系数映射（写入 commodity_sector_mappings 表）────
+sector_mappings:
+  - sector: 石油石化
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 采掘服务
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 化工
+    relationship: downstream
+    coefficient: -0.7
+  - sector: 航空机场
+    relationship: downstream
+    coefficient: -0.9
+
+# ── 行业-股票敞口（写入 sector_stock_exposures 表）──────────
+sector_exposures:
+  - sector: 石油石化
+    symbol: "601857"
+    exposure: 100.0
+  - sector: 石油石化
+    symbol: "600028"
+    exposure: 100.0
+  - sector: 采掘服务
+    symbol: "601808"
+    exposure: 100.0
+
+# ── 公司商品画像（写入 company_commodity_profiles 表）────────
+company_profiles:
+  - symbol: "601857"
+    role: upstream_resource
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 80.0
+    pricing_power: 80.0
+    inventory_sensitivity: 50.0
+    pass_through_ability: 60.0
+    earnings_elasticity: 85.0
+    lag_days: 0
+    evidence: 中国石油为原油开采上游企业，受益于原油价格上涨
+
+  - symbol: "600028"
+    role: midstream_processing
+    channel: spread
+    benefit_when_price_up: true
+    benefit_when_price_down: true
+    exposure_strength: 70.0
+    pricing_power: 60.0
+    inventory_sensitivity: 70.0
+    pass_through_ability: 65.0
+    earnings_elasticity: 60.0
+    lag_days: 5
+    evidence: 中国石化主营炼油与化工，为中游加工环节，受益于原油价格波动带来的价差空间
+
+  - symbol: "601808"
+    role: upstream_service
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 75.0
+    pricing_power: 70.0
+    inventory_sensitivity: 30.0
+    pass_through_ability: 50.0
+    earnings_elasticity: 70.0
+    lag_days: 30
+    evidence: 中海油服提供油气田服务，属于上游服务环节，价格上涨传导至资本开支有一定滞后
+
+  - symbol: "601111"
+    role: transport
+    channel: cost
+    benefit_when_price_up: false
+    benefit_when_price_down: true
+    exposure_strength: 85.0
+    pricing_power: 40.0
+    inventory_sensitivity: 40.0
+    pass_through_ability: 50.0
+    earnings_elasticity: 80.0
+    lag_days: 7
+    evidence: 航空企业，燃油为主要成本支出，受益于原油价格下跌

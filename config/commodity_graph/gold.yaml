@@ -1,0 +1,60 @@
+commodity: gold
+name: 黄金
+
+# ── 关键词识别 ──────────────────────────────────────────────
+keywords:
+  - 黄金
+  - gold
+  - 金价
+  - 贵金属
+  - 金矿
+
+sector_keywords:
+  - 贵金属
+  - 黄金
+  - 有色金属
+
+default_sector: 贵金属
+
+upstream_sectors:
+  - 贵金属
+  - 黄金
+  - 有色金属
+
+downstream_sectors: []
+
+# ── 精确股票映射 ─────────────────────────────────────────────
+exact_stocks:
+  "600547":
+    relationship: upstream
+    name: 山东黄金
+  "600489":
+    relationship: upstream
+    name: 中金黄金
+  "600988":
+    relationship: upstream
+    name: 赤峰黄金
+
+# ── 行业-板块系数映射 ─────────────────────────────────────────
+sector_mappings:
+  - sector: 贵金属
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 黄金
+    relationship: upstream
+    coefficient: 1.0
+
+# ── 行业-股票敞口 ─────────────────────────────────────────────
+sector_exposures:
+  - sector: 贵金属
+    symbol: "600547"
+    exposure: 100.0
+  - sector: 贵金属
+    symbol: "600489"
+    exposure: 100.0
+  - sector: 贵金属
+    symbol: "600988"
+    exposure: 100.0
+
+# ── 公司商品画像（黄金暂无 V2 画像，留空供后续补充）────────────
+company_profiles: []

@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from datetime import datetime
 from typing import Any
 
 from .. import db
 from .event_llm import extract_event_llm
+from .commodity_loader import get_commodity_kb, reload_kb as _reload_kb
 
-COMMODITY_KB = {
+# ---------------------------------------------------------------------------
+# COMMODITY_KB: loaded from config/commodity_graph/*.yaml at module import.
+# Falls back to the hardcoded dict below if YAML loading fails or returns empty.
+# ---------------------------------------------------------------------------
+
+_HARDCODED_COMMODITY_KB = {
     "tungsten": {
         "name": "钨",
         "keywords": ["钨", "tungsten", "中钨", "厦钨", "硬质合金", "钨矿"],
@@ -86,6 +93,37 @@ COMMODITY_KB = {
         "downstream_sectors": ["锂电池", "汽车", "电力设备"]
     }
 }
+
+# ---------------------------------------------------------------------------
+# Load from YAML; fall back to the hardcoded dict if YAML loading fails.
+# ---------------------------------------------------------------------------
+_yaml_kb = get_commodity_kb()
+if _yaml_kb:
+    COMMODITY_KB = _yaml_kb
+    print(
+        f"[event_engine] 已从 YAML 加载 {len(COMMODITY_KB)} 种商品知识库。",
+        file=sys.stderr,
+    )
+else:
+    COMMODITY_KB = _HARDCODED_COMMODITY_KB
+    print(
+        "[event_engine] YAML 加载失败，回退到硬编码知识库。",
+        file=sys.stderr,
+    )
+
+
+def reload_commodity_kb() -> None:
+    """热重载商品知识库（YAML → COMMODITY_KB）。"""
+    global COMMODITY_KB
+    new_kb = _reload_kb()
+    if new_kb:
+        COMMODITY_KB = new_kb
+    else:
+        print(
+            "[event_engine] reload_commodity_kb: YAML 加载失败，保留现有知识库。",
+            file=sys.stderr,
+        )
+
 
 EVENT_TYPE_KEYWORDS = {
     "geo_conflict": ["地缘", "战争", "军事", "红海", "袭击", "制裁", "冲突", "俄乌", "巴以", "紧张局势"],

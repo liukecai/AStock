@@ -1,0 +1,66 @@
+commodity: tungsten
+name: 钨
+
+# ── 关键词识别 ──────────────────────────────────────────────
+keywords:
+  - 钨
+  - tungsten
+  - 中钨
+  - 厦钨
+  - 硬质合金
+  - 钨矿
+
+sector_keywords:
+  - 有色金属
+  - 小金属
+  - 硬质合金
+  - 材料
+  - 金属
+
+default_sector: 有色金属
+
+upstream_sectors:
+  - 有色金属
+  - 小金属
+  - 硬质合金
+
+downstream_sectors: []
+
+# ── 精确股票映射 ─────────────────────────────────────────────
+exact_stocks:
+  "000657":
+    relationship: upstream
+    name: 中钨高新
+  "600549":
+    relationship: upstream
+    name: 厦门钨业
+  "603993":
+    relationship: upstream
+    name: 洛阳钼业
+
+# ── 行业-板块系数映射 ─────────────────────────────────────────
+sector_mappings:
+  - sector: 有色金属
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 小金属
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 硬质合金
+    relationship: downstream
+    coefficient: -0.8
+
+# ── 行业-股票敞口 ─────────────────────────────────────────────
+sector_exposures:
+  - sector: 有色金属
+    symbol: "000657"
+    exposure: 100.0
+  - sector: 有色金属
+    symbol: "600549"
+    exposure: 100.0
+  - sector: 有色金属
+    symbol: "603993"
+    exposure: 100.0
+
+# ── 公司商品画像（钨暂无 V2 画像，留空供后续补充）────────────
+company_profiles: []

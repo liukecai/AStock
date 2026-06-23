@@ -1,0 +1,122 @@
+commodity: lithium
+name: 锂
+
+# ── 关键词识别 ──────────────────────────────────────────────
+keywords:
+  - 锂
+  - lithium
+  - 碳酸锂
+  - 氢氧化锂
+  - 盐湖提锂
+  - 电池级碳酸锂
+
+sector_keywords:
+  - 能源金属
+  - 电池材料
+  - 锂电池
+  - 汽车
+  - 有色金属
+
+default_sector: 能源金属
+
+upstream_sectors:
+  - 能源金属
+  - 电池材料
+
+downstream_sectors:
+  - 锂电池
+  - 汽车
+  - 电力设备
+
+# ── 精确股票映射 ─────────────────────────────────────────────
+exact_stocks:
+  "002466":
+    relationship: upstream
+    name: 天齐锂业
+  "002460":
+    relationship: upstream
+    name: 赣锋锂业
+  "000792":
+    relationship: upstream
+    name: 盐湖股份
+
+# ── 行业-板块系数映射 ─────────────────────────────────────────
+sector_mappings:
+  - sector: 能源金属
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 电池材料
+    relationship: upstream
+    coefficient: 1.0
+  - sector: 锂电池
+    relationship: downstream
+    coefficient: -0.8
+  - sector: 汽车
+    relationship: downstream
+    coefficient: -0.6
+
+# ── 行业-股票敞口 ─────────────────────────────────────────────
+sector_exposures:
+  - sector: 能源金属
+    symbol: "002466"
+    exposure: 100.0
+  - sector: 能源金属
+    symbol: "002460"
+    exposure: 100.0
+  - sector: 能源金属
+    symbol: "000792"
+    exposure: 100.0
+
+# ── 公司商品画像 ─────────────────────────────────────────────
+company_profiles:
+  - symbol: "002466"
+    role: upstream_resource
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 90.0
+    pricing_power: 80.0
+    inventory_sensitivity: 60.0
+    pass_through_ability: 70.0
+    earnings_elasticity: 90.0
+    lag_days: 0
+    evidence: 天齐锂业拥有优质锂资源，属于锂行业上游矿企，受益于锂价上涨
+
+  - symbol: "002460"
+    role: upstream_resource
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 85.0
+    pricing_power: 75.0
+    inventory_sensitivity: 65.0
+    pass_through_ability: 70.0
+    earnings_elasticity: 85.0
+    lag_days: 0
+    evidence: 赣锋锂业为锂盐及资源开发巨头，属于上游企业，受益于锂价上涨
+
+  - symbol: "000792"
+    role: upstream_resource
+    channel: revenue
+    benefit_when_price_up: true
+    benefit_when_price_down: false
+    exposure_strength: 80.0
+    pricing_power: 70.0
+    inventory_sensitivity: 50.0
+    pass_through_ability: 60.0
+    earnings_elasticity: 80.0
+    lag_days: 0
+    evidence: 盐湖股份拥有盐湖锂资源，属于锂行业上游，受益于锂价上涨
+
+  - symbol: "300750"
+    role: downstream_manufacturing
+    channel: cost
+    benefit_when_price_up: false
+    benefit_when_price_down: true
+    exposure_strength: 75.0
+    pricing_power: 85.0
+    inventory_sensitivity: 60.0
+    pass_through_ability: 80.0
+    earnings_elasticity: 70.0
+    lag_days: 15
+    evidence: 宁德时代为动力电池制造商，锂是其重要原材料成本，受益于锂价下跌
