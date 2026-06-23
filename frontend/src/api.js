@@ -69,4 +69,7 @@ export const api = {
       body: JSON.stringify({ news_id: newsId, title, summary, time }),
     }),
   rebuildEvents: (adminSecret = "") => request("/events/rebuild", { method: "POST", adminSecret }),
+  getJobs: () => request("/jobs"),
+  retryJob: (name, adminSecret = "") =>
+    request(`/jobs/${name}/retry`, { method: "POST", adminSecret }),
 };

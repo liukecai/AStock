@@ -14,11 +14,34 @@ from .services.pipeline import run_signal_pipeline
 
 router = APIRouter(prefix="/api")
 
+# Board filter SQL fragments — use SIMILAR TO for PostgreSQL, GLOB for SQLite.
+# These are embedded directly in SQL so must not contain user input.
+_GLOB_OR_LIKE = {
+    # (sqlite_glob_pattern, pg_similar_to_pattern)
+    "沪A": ("60[0135]*", "60[0135]%"),
+    "深A": ("00[0123]*", "00[0123]%"),
+    "创业板": ("30[01]*", "30[01]%"),
+    "科创板": ("68[89]*", "68[89]%"),
+}
+
+
+def _board_clause(board: str) -> str | None:
+    """Return the WHERE sub-clause for the given board name."""
+    from . import db as _db
+    mapping = _GLOB_OR_LIKE.get(board)
+    if not mapping:
+        return None
+    sqlite_pat, pg_pat = mapping
+    if _db._is_pg():
+        return f"s.symbol LIKE '{pg_pat}'"
+    return f"s.symbol GLOB '{sqlite_pat}'"
+
+
 MARKET_BOARD_SQL = {
-    "沪A": "s.symbol GLOB '60[0135]*'",
-    "深A": "s.symbol GLOB '00[0123]*'",
-    "创业板": "s.symbol GLOB '30[01]*'",
-    "科创板": "s.symbol GLOB '68[89]*'",
+    "沪A": "沪A",
+    "深A": "深A",
+    "创业板": "创业板",
+    "科创板": "科创板",
 }
 
 
@@ -136,7 +159,7 @@ def dashboard(
         where_clause += " AND s.status=?"
         params.append(status)
     if board and board != "全部":
-        board_clause = MARKET_BOARD_SQL.get(board)
+        board_clause = _board_clause(board)
         if not board_clause:
             raise HTTPException(status_code=422, detail="不支持的板块筛选")
         where_clause += f" AND {board_clause}"
@@ -358,9 +381,73 @@ def get_recent_news(
 @router.get("/jobs")
 def jobs() -> list[dict]:
     items = db.rows("SELECT * FROM jobs ORDER BY name")
+    # Try to enrich with next_run_time from APScheduler
+    next_run_map: dict[str, str | None] = {}
+    try:
+        from .main import scheduler
+        _JOB_ID_MAP = {
+            "market_update": "daily-market-update",
+            "signal_pipeline": "daily-signals",
+            "rss_news": "hourly-rss-news",
+            "cninfo_announcements": "daily-cninfo-update",
+        }
+        for name, job_id in _JOB_ID_MAP.items():
+            job = scheduler.get_job(job_id)
+            if job and job.next_run_time:
+                next_run_map[name] = job.next_run_time.isoformat()
+            else:
+                next_run_map[name] = None
+    except Exception:
+        pass  # Scheduler not running in test/dev environment
+
     for item in items:
         item["details"] = json.loads(item["details"])
+        item["next_run_time"] = next_run_map.get(item["name"])
     return items
+
+
+# Supported job names → (function_to_call, display_name)
+_RETRY_JOBS: dict[str, tuple] = {}
+
+def _get_retry_jobs() -> dict[str, tuple]:
+    """Lazy-import to avoid circular imports at module load time."""
+    global _RETRY_JOBS
+    if not _RETRY_JOBS:
+        from .services.market import update_market_data
+        from .services.pipeline import run_signal_pipeline
+        from .services.rss_news import update_rss_news
+        from .services.announcements import update_cninfo_announcements
+        _RETRY_JOBS = {
+            "market_update": (update_market_data, "行情更新"),
+            "signal_pipeline": (run_signal_pipeline, "信号计算"),
+            "rss_news": (update_rss_news, "RSS 新闻采集"),
+            "cninfo_announcements": (update_cninfo_announcements, "巨潮公告采集"),
+        }
+    return _RETRY_JOBS
+
+
+@router.post("/jobs/{name}/retry")
+def retry_job(
+    name: str,
+    x_admin_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    """Manually trigger a scheduled job by name.
+
+    Requires X-Admin-Secret header. Runs the job in a background thread
+    and returns immediately — use GET /jobs to monitor progress.
+    """
+    _require_admin(x_admin_secret)
+    retry_jobs = _get_retry_jobs()
+    if name not in retry_jobs:
+        raise HTTPException(
+            status_code=404,
+            detail=f"未知任务: {name}。支持的任务: {list(retry_jobs.keys())}",
+        )
+    fn, display_name = retry_jobs[name]
+    import threading
+    t = threading.Thread(target=fn, name=f"manual-retry-{name}", daemon=True)
+    t.start()
+    return {"status": "started", "job": name, "display_name": display_name}
 
 
 # Event APIs

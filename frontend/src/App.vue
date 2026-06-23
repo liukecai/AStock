@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { api } from "./api";
 import {
   adminAuth,
   authorizeAdmin,
@@ -12,6 +13,7 @@ import {
 
 const route = useRoute();
 const secret = ref("");
+const hasFailedJobs = ref(false);
 
 async function submitAdminAuth() {
   if (!secret.value.trim()) {
@@ -24,8 +26,20 @@ async function submitAdminAuth() {
   } catch {}
 }
 
+async function checkFailedJobs() {
+  try {
+    const jobs = await api.getJobs();
+    hasFailedJobs.value = jobs.some(j => j.status === 'failed');
+  } catch (err) {
+    console.error("Failed to check jobs status:", err);
+  }
+}
+
 onMounted(() => {
   bootstrapAdminAuth();
+  checkFailedJobs();
+  const interval = setInterval(checkFailedJobs, 30000);
+  onUnmounted(() => clearInterval(interval));
 });
 </script>
 
@@ -43,6 +57,10 @@ onMounted(() => {
         <RouterLink to="/">信号台</RouterLink>
         <RouterLink to="/events">事件驱动</RouterLink>
         <RouterLink to="/review">映射审核</RouterLink>
+        <RouterLink to="/jobs" class="nav-jobs">
+          任务中心
+          <span v-if="hasFailedJobs" class="badge-dot-failed"></span>
+        </RouterLink>
         <a href="/docs" target="_blank">API</a>
       </nav>
       <div class="admin-actions">
@@ -91,3 +109,31 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.nav-jobs {
+  position: relative;
+}
+.badge-dot-failed {
+  position: absolute;
+  top: 2px;
+  right: -6px;
+  width: 6px;
+  height: 6px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #0b0f19;
+  animation: pulse-red 2s infinite;
+}
+@keyframes pulse-red {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+</style>

@@ -10,6 +10,7 @@ const router = createRouter({
     { path: "/stocks/:symbol", component: () => import("./views/StockDetail.vue") },
     { path: "/review", component: () => import("./views/MappingReview.vue") },
     { path: "/events", component: () => import("./views/Events.vue") },
+    { path: "/jobs", component: () => import("./views/Jobs.vue") },
   ],
   scrollBehavior: () => ({ top: 0 }),
 });
