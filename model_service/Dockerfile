@@ -6,9 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install CPU-only PyTorch first to save disk space and build time
+# Install standard PyTorch with GPU support
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+    pip install --no-cache-dir torch
 
 # Copy and install other Python requirements
 COPY requirements.txt .

@@ -3,6 +3,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import torch
 from transformers import pipeline
 
 # Configure logging
@@ -21,12 +22,17 @@ async def lifespan(app: FastAPI):
     hf_endpoint = os.getenv("HF_ENDPOINT", "https://huggingface.co")
     logger.info(f"Using HuggingFace endpoint: {hf_endpoint}")
     
+    # Detect GPU availability
+    device = 0 if torch.cuda.is_available() else -1
+    logger.info(f"Using device: {'GPU (cuda)' if device == 0 else 'CPU'}")
+    
     # Pre-load models on startup
     logger.info("Initializing Chinese financial sentiment model (yiyanghkust/finbert-tone-chinese)...")
     try:
         models["zh"] = pipeline(
             "sentiment-analysis", 
             model=MODEL_IDS["zh"],
+            device=device,
             top_k=None
         )
         logger.info("Successfully loaded Chinese model.")
@@ -38,6 +44,7 @@ async def lifespan(app: FastAPI):
         models["en"] = pipeline(
             "sentiment-analysis", 
             model=MODEL_IDS["en"],
+            device=device,
             top_k=None
         )
         logger.info("Successfully loaded English model.")
