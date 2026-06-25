@@ -474,6 +474,8 @@ def init_db() -> None:
             for statement in SCHEMA.split(";"):
                 stmt = statement.strip()
                 if stmt:
+                    if "CREATE TABLE IF NOT EXISTS commodity_impacts" in stmt:
+                        stmt = stmt.replace("id INTEGER PRIMARY KEY", "id SERIAL PRIMARY KEY")
                     try:
                         cur.execute(stmt)
                     except Exception as e:
