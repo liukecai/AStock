@@ -185,3 +185,56 @@ def update_rss_news() -> dict:
         finished_at=datetime.now().replace(microsecond=0).isoformat(),
     )
     return details
+
+
+def rescore_rss_news() -> dict:
+    """Re-score already-stored RSS news items that fell back to rule-based scoring when model-service was offline."""
+    db.init_db()
+    items = db.rows(
+        "SELECT id, title, summary, language FROM news_items WHERE score_source = 'rule' AND source != '巨潮资讯'"
+    )
+    if not items:
+        return {"status": "ok", "rescored": 0, "message": "No RSS news items with rule-based fallback score found."}
+        
+    updates = []
+    success_count = 0
+    for item in items:
+        text = f"{item['title']}。{item['summary']}"
+        lang = item.get("language", "zh")
+        inference = get_model_inference(text, lang=lang)
+        if inference is not None:
+            updates.append((
+                inference.sentiment,
+                inference.model_version,
+                inference.score_source,
+                json.dumps(inference.raw_output, ensure_ascii=False),
+                item["id"]
+            ))
+            success_count += 1
+            
+    if updates:
+        with db.connect() as conn:
+            db._execmany(
+                conn,
+                """
+                UPDATE news_items
+                SET sentiment=?, model_version=?, score_source=?, model_raw_output=?
+                WHERE id=?
+                """,
+                updates,
+            )
+            
+        export_parquet_snapshots(
+            (
+                "news/news_events.parquet",
+                "news/news_stock_links.parquet",
+            )
+        )
+        
+    return {
+        "status": "ok",
+        "total_queued": len(items),
+        "rescored": success_count,
+        "message": f"Successfully rescored {success_count}/{len(items)} RSS news items using model-service."
+    }
+

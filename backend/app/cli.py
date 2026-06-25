@@ -14,7 +14,7 @@ from .services.announcements import (
 from .services.demo import seed_demo_data
 from .services.market import update_market_data
 from .services.pipeline import run_signal_pipeline
-from .services.rss_news import update_rss_news
+from .services.rss_news import rescore_rss_news, update_rss_news
 
 
 def main() -> None:
@@ -28,6 +28,7 @@ def main() -> None:
             "update-rss",
             "update-all-news",
             "rescore-news",
+            "rescore-rss",
             "run",
             "backtest",
             "calibrate",
@@ -58,6 +59,8 @@ def main() -> None:
         print(update_rss_news())
     elif args.command == "rescore-news":
         print(rescore_cninfo_announcements())
+    elif args.command == "rescore-rss":
+        print(rescore_rss_news())
     elif args.command in {"backtest", "calibrate"}:
         parquet_root = Path(settings.data_dir) / "parquet"
         output_dir = Path(args.output_dir or Path(settings.data_dir) / "backtest")
