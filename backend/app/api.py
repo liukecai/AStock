@@ -594,7 +594,7 @@ def rebuild_events(
     news_list = db.rows("SELECT id, title, summary, published_at FROM news_items")
     from .services.event_engine import analyze_event_text
     with db.connect() as conn:
-        conn.execute("DELETE FROM events WHERE news_id IS NOT NULL")
+        db._exec(conn, "DELETE FROM events WHERE news_id IS NOT NULL")
     processed = 0
     created = 0
     for news in news_list:
