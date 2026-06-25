@@ -110,7 +110,7 @@ Compose 内自托管，不暴露公网端口；单个源失败会被隔离并记
 - `GET /api/signal`：查询最新信号
 - `GET /api/stocks/{symbol}`：个股行情、新闻、因子和最新信号
 - `GET /api/jobs`：获取所有后台更新与计算任务的最新运行进度、状态与下次调度时间
-- `POST /api/jobs/{name}/retry`：手动触发指定的后台更新任务运行（支持的任务包括 `market_update`、`signal_pipeline`、`rss_news`、`cninfo_announcements`）
+- `POST /api/jobs/{name}/retry`：手动触发指定的后台更新任务运行（支持的任务包括 `market_update`、`signal_pipeline`、`rss_news_update`、`cninfo_update`）
 - `POST /api/pipeline/run`：手动重算信号
 - `POST /api/events/analyze`：分析特定新闻（可传 `news_id` 或 `title`/`summary`/`time`）
 - `GET /api/events`：获取商品事件列表（支持分页，以及按 `commodity` / `event_type` / `direction` 筛选）

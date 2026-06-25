@@ -192,8 +192,8 @@ let pollInterval = null
 const JOB_DISPLAY_NAMES = {
   market_update: '行情更新',
   signal_pipeline: '信号计算',
-  rss_news: 'RSS 新闻采集',
-  cninfo_announcements: '巨潮公告采集',
+  rss_news_update: 'RSS 新闻采集',
+  cninfo_update: '巨潮公告采集',
 }
 
 const STATUS_LABELS = {

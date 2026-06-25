@@ -388,8 +388,8 @@ def jobs() -> list[dict]:
         _JOB_ID_MAP = {
             "market_update": "daily-market-update",
             "signal_pipeline": "daily-signals",
-            "rss_news": "hourly-rss-news",
-            "cninfo_announcements": "daily-cninfo-update",
+            "rss_news_update": "hourly-rss-news",
+            "cninfo_update": "daily-cninfo-update",
         }
         for name, job_id in _JOB_ID_MAP.items():
             job = scheduler.get_job(job_id)
@@ -420,8 +420,8 @@ def _get_retry_jobs() -> dict[str, tuple]:
         _RETRY_JOBS = {
             "market_update": (update_market_data, "行情更新"),
             "signal_pipeline": (run_signal_pipeline, "信号计算"),
-            "rss_news": (update_rss_news, "RSS 新闻采集"),
-            "cninfo_announcements": (update_cninfo_announcements, "巨潮公告采集"),
+            "rss_news_update": (update_rss_news, "RSS 新闻采集"),
+            "cninfo_update": (update_cninfo_announcements, "巨潮公告采集"),
         }
     return _RETRY_JOBS
 
