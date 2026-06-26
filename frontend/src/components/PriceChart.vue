@@ -51,6 +51,37 @@ function render() {
       backgroundColor: "#111c19",
       borderColor: "#2b3a35",
       textStyle: { color: "#eef5f1" },
+      formatter: function (params) {
+        if (!params || params.length === 0) return "";
+        let result = `<div style="font-weight: bold; margin-bottom: 6px; font-size: 12px; color: #8da099;">${params[0].name}</div>`;
+        params.forEach((item) => {
+          if (item.seriesName === "K线") {
+            const dataVal = item.value;
+            if (Array.isArray(dataVal)) {
+              const offset = dataVal.length >= 5 ? 1 : 0;
+              const open = dataVal[offset];
+              const close = dataVal[offset + 1];
+              const low = dataVal[offset + 2];
+              const high = dataVal[offset + 3];
+              
+              const isUp = close >= open;
+              const colorStyle = `font-weight: bold; color: ${isUp ? '#c8ff5c' : '#ff8585'}`;
+              
+              result += `<div style="margin-bottom: 4px;">${item.marker}${item.seriesName}: <span style="${colorStyle}">${close}</span></div>`;
+              result += `<div style="padding-left: 16px; font-size: 11px; color: #a5b3ae; line-height: 1.5; margin-bottom: 6px;">
+                <div>开盘: <span style="color: #eef5f1;">${open}</span></div>
+                <div>收盘: <span style="color: #eef5f1;">${close}</span></div>
+                <div>最低: <span style="color: #eef5f1;">${low}</span></div>
+                <div>最高: <span style="color: #eef5f1;">${high}</span></div>
+              </div>`;
+            }
+          } else {
+            const val = typeof item.value === 'number' ? item.value.toFixed(2) : item.value;
+            result += `<div style="margin-bottom: 2px;">${item.marker}${item.seriesName}: <span style="font-weight: bold; color: #eef5f1;">${val}</span></div>`;
+          }
+        });
+        return result;
+      },
     },
     legend: {
       data: ["K线", "MA20", "MA60"],
