@@ -41,7 +41,8 @@ docs/architecture/v2/
 ├── 06_API_Design.md                 ← 图谱/事件/个股/验证/任务 API / DTO
 ├── 07_Web_Design.md                 ← 事件看板 / 供应链探索 / 知识卡 / Why This Stock / 验证面板
 ├── 08_Implementation_Roadmap.md     ← Phase 1~6 实施路线图
-└── 09_Future_V3.md                  ← V3 演进方向
+├── 09_Future_V3.md                  ← V3 演进方向
+└── 10_Interaction_Layer_Design.md   ← 人机协同、纠错反馈、动态预警与自然语言交互
 ```
 
 ### 建议阅读顺序
@@ -56,6 +57,7 @@ docs/architecture/v2/
 8. **07_Web_Design** → 理解推理过程如何展示给用户。
 9. **08_Implementation_Roadmap** → 理解如何从 V1 平滑升级到 V2。
 10. **09_Future_V3** → 了解长期演进方向。
+11. **10_Interaction_Layer_Design** → 了解系统如何实现双向人机协同与高级干预。
 
 ### 文档间逻辑关系
 
@@ -68,9 +70,9 @@ docs/architecture/v2/
                                      ↓
                               06 API 设计
                                      ↓
-                              07 Web 设计
+                     07 Web 设计 ↔ 10 交互层设计
                                      ↓
-                          08 实施路线图 (串联 01~07)
+                          08 实施路线图 (串联 01~07, 10)
                                      ↓
                            09 未来 V3 演进
 ```
