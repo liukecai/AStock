@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, nextTick } from "vue";
 import { api } from "../api";
 import { adminAuth, getAdminSecret, openAdminDialog } from "../adminAuth";
 import SignalListRow from "../components/SignalListRow.vue";
@@ -53,19 +53,37 @@ function setBoard(board) {
   load();
 }
 
+function scrollToTableTop() {
+  nextTick(() => {
+    const tableEl = document.querySelector(".signal-table");
+    if (tableEl) {
+      const rect = tableEl.getBoundingClientRect();
+      const scrollTop = window.scrollY + rect.top - 20;
+      window.scrollTo({
+        top: scrollTop,
+        behavior: "smooth",
+      });
+    }
+  });
+}
+
 function changePage(delta) {
   const newPage = page.value + delta;
   if (newPage >= 1 && newPage <= totalPages.value) {
     page.value = newPage;
     jumpPage.value = "";
-    load();
+    load().then(() => {
+      scrollToTableTop();
+    });
   }
 }
 
 function changePageSize() {
   page.value = 1;
   jumpPage.value = "";
-  load();
+  load().then(() => {
+    scrollToTableTop();
+  });
 }
 
 function goToPage() {
@@ -76,7 +94,9 @@ function goToPage() {
   }
   if (target !== page.value) {
     page.value = target;
-    load();
+    load().then(() => {
+      scrollToTableTop();
+    });
   }
   jumpPage.value = "";
 }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, nextTick } from "vue";
 import { api } from "../api";
 import { adminAuth, getAdminSecret, openAdminDialog } from "../adminAuth";
 
@@ -159,11 +159,25 @@ function setDirection(val) {
   loadEvents();
 }
 
+function scrollToEventsListTop() {
+  nextTick(() => {
+    const listEl = document.querySelector(".events-list");
+    if (listEl) {
+      listEl.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }
+  });
+}
+
 function changePage(delta) {
   const newPage = page.value + delta;
   if (newPage >= 1 && newPage <= totalPages.value) {
     page.value = newPage;
-    loadEvents();
+    loadEvents().then(() => {
+      scrollToEventsListTop();
+    });
   }
 }
 
