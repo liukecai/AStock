@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, nextTick } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { api } from "../api";
 import { adminAuth, getAdminSecret, openAdminDialog } from "../adminAuth";
 import SignalListRow from "../components/SignalListRow.vue";
@@ -8,11 +9,11 @@ const data = ref({ signals: [], summary: {} });
 const loading = ref(true);
 const refreshing = ref(false);
 const error = ref("");
-const activeFilter = ref("全部");
-const activeBoard = ref("全部");
+const activeFilter = ref(sessionStorage.getItem("dashboard_filter") || "全部");
+const activeBoard = ref(sessionStorage.getItem("dashboard_board") || "全部");
 
-const page = ref(1);
-const limit = ref(10);
+const page = ref(Number.parseInt(sessionStorage.getItem("dashboard_page") || "1", 10));
+const limit = ref(Number.parseInt(sessionStorage.getItem("dashboard_limit") || "10", 10));
 const jumpPage = ref("");
 const totalPages = ref(0);
 const totalSignals = ref(0);
@@ -34,6 +35,14 @@ async function load() {
     data.value = res;
     totalPages.value = res.pagination?.total_pages || 0;
     totalSignals.value = res.pagination?.total || 0;
+
+    const savedScrollY = sessionStorage.getItem("dashboard_scroll_y");
+    if (savedScrollY) {
+      nextTick(() => {
+        window.scrollTo(0, Number.parseInt(savedScrollY, 10));
+        sessionStorage.removeItem("dashboard_scroll_y");
+      });
+    }
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -119,6 +128,15 @@ async function refresh() {
 }
 
 onMounted(load);
+
+onBeforeRouteLeave((to, from, next) => {
+  sessionStorage.setItem("dashboard_scroll_y", window.scrollY.toString());
+  sessionStorage.setItem("dashboard_page", page.value.toString());
+  sessionStorage.setItem("dashboard_limit", limit.value.toString());
+  sessionStorage.setItem("dashboard_filter", activeFilter.value);
+  sessionStorage.setItem("dashboard_board", activeBoard.value);
+  next();
+});
 </script>
 
 <template>
