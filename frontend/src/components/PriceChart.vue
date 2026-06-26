@@ -1,6 +1,6 @@
 <script setup>
 import * as echarts from "echarts/core";
-import { LineChart } from "echarts/charts";
+import { LineChart, CandlestickChart } from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
@@ -11,6 +11,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 echarts.use([
   LineChart,
+  CandlestickChart,
   GridComponent,
   LegendComponent,
   TooltipComponent,
@@ -33,6 +34,15 @@ function render() {
   if (!chart || !props.prices.length) return;
   const dates = props.prices.map((item) => item.trade_date.slice(5));
   const close = props.prices.map((item) => item.close);
+  
+  // Candlestick data format in ECharts: [open, close, lowest, highest]
+  const candlestickData = props.prices.map((item) => [
+    item.open,
+    item.close,
+    item.low,
+    item.high,
+  ]);
+
   chart.setOption({
     animation: true,
     grid: { left: 12, right: 18, top: 26, bottom: 28, containLabel: true },
@@ -43,14 +53,14 @@ function render() {
       textStyle: { color: "#eef5f1" },
     },
     legend: {
-      data: ["收盘", "MA20", "MA60"],
+      data: ["K线", "MA20", "MA60"],
       right: 10,
       textStyle: { color: "#8da099" },
     },
     xAxis: {
       type: "category",
       data: dates,
-      boundaryGap: false,
+      boundaryGap: true,
       axisLine: { lineStyle: { color: "#30403a" } },
       axisLabel: { color: "#73867f", interval: 19 },
     },
@@ -62,16 +72,14 @@ function render() {
     },
     series: [
       {
-        name: "收盘",
-        data: close,
-        type: "line",
-        showSymbol: false,
-        lineStyle: { width: 2, color: "#c8ff5c" },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(200,255,92,.24)" },
-            { offset: 1, color: "rgba(200,255,92,0)" },
-          ]),
+        name: "K线",
+        type: "candlestick",
+        data: candlestickData,
+        itemStyle: {
+          color: "rgba(200, 255, 92, 0.45)",   // Semi-transparent lime green for rising
+          color0: "rgba(255, 133, 133, 0.45)",  // Semi-transparent red for falling
+          borderColor: "#c8ff5c",               // Lime green border and shadow lines for rising
+          borderColor0: "#ff8585",              // Red border and shadow lines for falling
         },
       },
       {
