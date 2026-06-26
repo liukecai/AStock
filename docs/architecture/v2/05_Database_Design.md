@@ -270,23 +270,22 @@ Web API                → read optimized DTO
 
 ---
 
-## 7. 迁移策略
+## 7. ORM 与迁移策略
 
-### 7.1 SQLite → PostgreSQL
+### 7.1 全面拥抱 SQLAlchemy 与 PostgreSQL
 
 | 项目 | 策略 |
 |---|---|
-| ORM | 统一使用 SQLAlchemy，避免 SQLite 专有语法 |
-| Migration | 使用 Alembic 管理迁移脚本 |
-| JSON 字段 | 第一阶段 TEXT 存 JSON 字符串，迁移后升级 JSONB |
-| 时机 | 并发写入需求增加或数据量超过 SQLite 承受能力时 |
+| 数据库选型 | 彻底抛弃 V1 中的 SQLite 裸写 SQL，统一强制使用 PostgreSQL。 |
+| ORM | 统一使用 SQLAlchemy ORM，保障多跳图谱查询的可维护性。 |
+| Migration | 必须使用 Alembic 管理所有表结构的迁移脚本。 |
+| JSON 字段 | 直接使用 PostgreSQL 原生的 JSONB 类型，支持高效查询。 |
 
-### 7.2 SQLite 注意事项
+### 7.2 抛弃 SQLite 的原因
 
-- 避免多 worker 并发写入，写任务尽量串行。
-- 大批量写入使用事务。
-- 定期备份。
-- 控制单表无限增长。
+- 图谱数据存在大量多对多关系，后续多跳遍历和聚合在 SQLite 下性能极差。
+- SQLite 不支持并发写，无法满足 Worker 并发写入推理结果和验证结果的需求。
+- V1 原生 SQL 拼写极易出错，无法应对 V2 复杂的表结构演进。
 
 ---
 
@@ -318,13 +317,13 @@ Web API                → read optimized DTO
 
 ## 9. 架构决策记录（ADR）
 
-### ADR-001：第一阶段继续支持 SQLite
+### ADR-001：彻底抛弃 SQLite，强制使用 PostgreSQL
 
-部署简单，开发速度快，适合 MVP。所有表设计兼容 PostgreSQL。
+图谱和验证闭环对并发写入和复杂 Join 查询要求极高，SQLite 无法胜任。V2 从 Phase 1 开始就强制使用 PostgreSQL。
 
-### ADR-002：使用 SQLAlchemy 隔离数据库差异
+### ADR-002：强制使用 SQLAlchemy + Alembic
 
-降低迁移成本，表结构统一管理，便于引入 Alembic。
+放弃 V1 裸写 SQL 的方式，通过 ORM 管理复杂的图谱模型关联，使用 Alembic 保障增量演进时的结构安全。
 
 ### ADR-003：Evidence 独立建表并长期保留
 
@@ -346,6 +345,6 @@ Web API                → read optimized DTO
 
 `event_validation_results` + `validation_summary` 支持事件级复盘、路径级统计和权重回写。
 
-### ADR-008：JSON 字段先以 TEXT 兼容，后续迁移 JSONB
+### ADR-008：直接使用 PostgreSQL JSONB
 
-兼容 SQLite，迁移 PostgreSQL 后升级。
+不再考虑 SQLite 兼容问题，所有存储半结构化数据（如别名列表、扩展属性、分数拆解）的字段直接使用高性能的 JSONB。

@@ -64,6 +64,7 @@ Event Engine → Reasoning Engine → Exposure Engine → Scoring Engine → Val
 | subtype | 子类型 |
 | entities | 涉及实体列表 |
 | intensity | 强度 |
+| lifecycle_stage | 预期阶段（rumor 传闻期 / confirmed 落地期 / priced_in 兑现期，高度影响市场反馈） |
 | direction | 影响方向（如 `positive_for_supplier`） |
 | time_window | 预期影响窗口 |
 | source_evidence_id | 来源证据 |
@@ -124,6 +125,7 @@ Structured Event
 - 默认 `max_depth = 4`。
 - 路径评分：`path_score = ∏(edge_weight × edge_confidence) × depth_decay`。
 - 搜索时只使用 `status = active` 或 `validated` 的关系。
+- **防未来函数约束**：必须带入事件发生的时间（`context_date`）进行图谱游走，过滤掉在该时间点还不存在或已失效的边，确保 Validation 回测的有效性。
 
 ### 4.3 推理输出
 

@@ -233,7 +233,7 @@ Phase 4：LLM 抽取、图谱更新、验证计算独立服务
 Docker Compose
 ├── backend     ← FastAPI + APScheduler + 离线任务
 ├── frontend    ← Web 页面
-├── database    ← SQLite（后续迁移 PostgreSQL）
+├── postgres    ← PostgreSQL（V2 标准存储底座）
 └── nginx       ← 静态资源 + API 反向代理
 ```
 
@@ -253,11 +253,10 @@ Docker Compose
 
 | 阶段 | 数据库 | 适合场景 |
 |---|---|---|
-| SQLite | 个人部署、MVP、小规模 | 并发写入弱 |
-| PostgreSQL | 多任务写入、复杂索引、向量检索 | 需要维护 |
-| Neo4j | 图谱路径查询规模超过关系型能力 | 部署成本高，V2 不强制 |
+| PostgreSQL | V2 标准存储底座，多任务写入、复杂索引、向量检索 | 必须使用 SQLAlchemy + Alembic 管理模型与迁移 |
+| Neo4j | 图谱路径查询规模超过关系型能力时 | 部署成本高，第一阶段暂不强制 |
 
-数据库访问统一使用 SQLAlchemy，避免 SQLite 专有语法 → 详见 [05_Database_Design.md](./05_Database_Design.md)。
+彻底抛弃 V1 中的裸写 SQL 和 SQLite，统一使用 SQLAlchemy ORM 和 Alembic，保障多跳图谱查询和多表关联的可维护性 → 详见 [05_Database_Design.md](./05_Database_Design.md)。
 
 ### 7.4 文件存储
 
@@ -291,9 +290,9 @@ V2 采用增量升级：V1 基础设施 + Evidence Layer + Knowledge Graph + Rea
 
 LLM 只负责抽取实体/关系/事件和生成候选知识。最终影响计算由 Knowledge Graph + Reasoning Engine + Market Validation 完成。降低幻觉风险，提高系统可审计性。
 
-### ADR-003：第一阶段不引入 Neo4j
+### ADR-003：抛弃 SQLite，强制 PostgreSQL 作为图谱底座
 
-V2 第一阶段采用关系型数据库图谱表（`kg_entities`、`kg_relations`、`evidence`、`candidate_relations`），复用现有数据库栈。未来路径查询复杂度增加后再评估 Neo4j。
+图谱数据存在大量自关联和复杂查询，继续维护兼容 SQLite 的裸写 SQL 是维护灾难。V2 强制统一使用 PostgreSQL 和 SQLAlchemy ORM（配合 Alembic）。在路径查询复杂度明显超载前，暂不强制引入 Neo4j。
 
 ### ADR-004：YAML 保留为种子知识来源
 

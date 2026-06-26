@@ -37,7 +37,7 @@ V2：六氟化钨 →belongs_to→ 电子特气 →belongs_to→ 半导体材料
 
 | 字段 | 说明 |
 |---|---|
-| entity_id | 全局唯一 ID |
+| entity_id | 全局唯一 ID（建议使用 `MD5(entity_type + canonical_name)` 确保幂等） |
 | entity_type | 实体类型 |
 | name | 展示名称 |
 | canonical_name | 归一化名称（统一 `WF6` / `六氟化钨气体` → `六氟化钨`） |
@@ -91,6 +91,7 @@ V2：六氟化钨 →belongs_to→ 电子特气 →belongs_to→ 半导体材料
 | source_type | 关系来源类型 |
 | evidence_ids | 支持证据列表 |
 | status | `candidate` / `active` / `rejected` / `deprecated` / `validated` |
+| valid_from / valid_to | 关系有效时间区间（构建时序图谱，防止历史回测出现未来函数） |
 | created_at / updated_at | 时间戳 |
 
 ### 3.2 核心关系类型
@@ -246,7 +247,7 @@ Raw Source → Evidence Collector → Extractor → Candidate Entity/Relation
 | entity_lookup | 根据名称/别名/代码查找实体 | 全局搜索 |
 | neighbor_query | 查询实体一跳邻居 | Supply Chain Explorer |
 | path_query | 查询两实体间路径（含节点、关系、权重、置信度、证据） | 事件推理 |
-| impact_query | 从事件影响对象向外扩散 | Reasoning Engine 核心查询 |
+| impact_query | 从事件影响对象向外扩散（必须带有 `context_date` 约束） | Reasoning Engine 核心查询 |
 | stock_exposure_query | 查询股票对实体的暴露度 | 个股解释 |
 | evidence_query | 查询某关系的证据来源 | 可解释性 |
 | explain_query | 生成前端解释路径（读取已落库结果） | Why This Stock |
@@ -259,6 +260,7 @@ path_score = ∏(edge_weight × edge_confidence) × depth_decay
 
 - `depth_decay` 惩罚过长路径。
 - 默认 `max_depth = 4`，超过 4 跳后路径解释性下降且噪音增多。
+- **防未来函数约束**：所有进行历史事件推理和验证的图谱查询必须传入 `context_date`，只搜索满足 `valid_from <= context_date` 且 `(valid_to >= context_date 或为 null)` 的活动边。
 
 ### 6.3 查询排序
 
