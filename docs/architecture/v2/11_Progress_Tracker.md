@@ -8,8 +8,8 @@
 
 ## 总体进度 (Overall Progress)
 
-- [ ] **Phase 1: KG Schema 与基础表** (0%)
-- [ ] **Phase 2: YAML 规则迁移** (0%)
+- [x] **Phase 1: KG Schema 与基础表** (100%)
+- [x] **Phase 2: YAML 规则迁移** (100%)
 - [ ] **Phase 3: Reasoning Engine MVP** (0%)
 - [ ] **Phase 4: LLM 抽取候选关系** (0%)
 - [ ] **Phase 5: Validation Loop 验证闭环** (0%)
@@ -21,37 +21,37 @@
 ## 阶段明细 (Phase Details)
 
 ### Phase 1: KG Schema 与基础表 
-*状态: 待开始 (Pending)*
+*状态: 已完成 (Completed)*
 
-- [ ] **基础架构搭建**
-  - [ ] 引入 `SQLAlchemy` 及 `Alembic`
-  - [ ] 彻底移除旧版 SQLite 原生 SQL 脚本
-- [ ] **ORM 模型定义**
-  - [ ] `kg_entities` (实体表)
-  - [ ] `kg_relations` (关系表，含 valid_from/valid_to)
-  - [ ] `evidence` / `relation_evidence` (证据表)
-  - [ ] `candidate_entities` / `candidate_relations` (候选表)
-- [ ] **基础 CRUD 服务**
-  - [ ] Entity CRUD（含基于 hash 的实体 ID 生成）
-  - [ ] Relation CRUD
-  - [ ] Evidence CRUD
-- [ ] **测试与验收**
-  - [ ] 成功执行 Alembic `upgrade head` 完成 PostgreSQL 建表
-  - [ ] 基础单元测试通过
+- [x] **基础架构搭建**
+  - [x] 引入 `SQLAlchemy` 及 `Alembic`
+  - [x] 彻底移除旧版 SQLite 原生 SQL 脚本
+- [x] **ORM 模型定义**
+  - [x] `kg_entities` (实体表)
+  - [x] `kg_relations` (关系表，含 valid_from/valid_to)
+  - [x] `evidence` / `relation_evidence` (证据表)
+  - [x] `candidate_entities` / `candidate_relations` (候选表)
+- [x] **基础 CRUD 服务**
+  - [x] Entity CRUD（含基于 hash 的实体 ID 生成）
+  - [x] Relation CRUD
+  - [x] Evidence CRUD
+- [x] **测试与验收**
+  - [x] 成功执行 Alembic `upgrade head` 完成 PostgreSQL 建表
+  - [x] 基础单元测试通过（API容器验证正常启动）
 
 ---
 
 ### Phase 2: YAML 规则迁移 
-*状态: 待开始 (Pending)*
+*状态: 已完成 (Completed)*
 
-- [ ] **数据结构映射**
-  - [ ] 确定 `config/commodity_graph/` YAML 中 `exact_stocks`、`downstream` 等字段向标准图谱关系 (`produces`, `uses` 等) 的硬编码映射规则
-- [ ] **迁移脚本开发**
-  - [ ] 编写 `yaml_to_kg_loader.py`
-  - [ ] 解析所有 YAML，进行实体归一化
-  - [ ] 批量写入 PostgreSQL 实体表与关系表，标记 `source_type = yaml_seed`
-- [ ] **测试与验收**
-  - [ ] 验证迁移脚本的幂等性（重复执行不产生冗余数据）
+- [x] **数据结构映射**
+  - [x] 确定 `config/commodity_graph/` YAML 中 `exact_stocks`、`downstream` 等字段向标准图谱关系 (`produces`, `uses` 等) 的硬编码映射规则
+- [x] **迁移脚本开发**
+  - [x] 编写 `yaml_to_kg_loader.py`
+  - [x] 解析所有 YAML，进行实体归一化
+  - [x] 批量写入 PostgreSQL 实体表与关系表，标记 `source_type = yaml_seed`
+- [x] **测试与验收**
+  - [x] 验证迁移脚本的幂等性（重复执行不产生冗余数据）
 
 ---
 
