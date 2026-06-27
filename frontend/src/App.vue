@@ -55,7 +55,9 @@ onMounted(() => {
       </RouterLink>
       <nav>
         <RouterLink to="/">信号台</RouterLink>
-        <RouterLink to="/events">事件驱动</RouterLink>
+        <RouterLink to="/v2/events">事件看板</RouterLink>
+        <RouterLink to="/v2/explorer">图谱探索</RouterLink>
+        <RouterLink to="/v2/validation">验证台</RouterLink>
         <RouterLink to="/review">映射审核</RouterLink>
         <RouterLink to="/jobs" class="nav-jobs">
           任务中心

@@ -139,6 +139,8 @@ app.add_middleware(
 app.include_router(router)
 from .api_candidates import router as candidates_router
 app.include_router(candidates_router)
+from .api_v2 import router as api_v2_router
+app.include_router(api_v2_router)
 
 
 @app.get("/")

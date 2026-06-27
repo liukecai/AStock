@@ -11,6 +11,10 @@ const router = createRouter({
     { path: "/review", component: () => import("./views/MappingReview.vue") },
     { path: "/events", component: () => import("./views/Events.vue") },
     { path: "/jobs", component: () => import("./views/Jobs.vue") },
+    { path: "/v2/events", component: () => import("./views/EventDashboardV2.vue") },
+    { path: "/v2/explorer", component: () => import("./views/SupplyChainExplorer.vue") },
+    { path: "/v2/validation", component: () => import("./views/ValidationPanel.vue") },
+
   ],
   scrollBehavior: () => ({ top: 0 }),
 });

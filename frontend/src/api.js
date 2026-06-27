@@ -73,3 +73,52 @@ export const api = {
   retryJob: (name, adminSecret = "") =>
     request(`/jobs/${name}/retry`, { method: "POST", adminSecret }),
 };
+
+export const apiV2 = {
+  // Graph API
+  getEntity: (id) => request(`/v2/graph/entities/${encodeURIComponent(id)}`),
+  getEntityNeighbors: (id, relationType = "") => {
+    let url = `/v2/graph/entities/${encodeURIComponent(id)}/neighbors`;
+    if (relationType) url += `?relation_type=${encodeURIComponent(relationType)}`;
+    return request(url);
+  },
+  searchEntities: (q, entityType = "") => {
+    let url = `/v2/graph/entities/search?q=${encodeURIComponent(q)}`;
+    if (entityType) url += `&entity_type=${encodeURIComponent(entityType)}`;
+    return request(url);
+  },
+  
+  // Events API
+  getEvents: (page = 1, pageSize = 20, eventType = "") => {
+    let url = `/v2/events?page=${page}&page_size=${pageSize}`;
+    if (eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
+    return request(url);
+  },
+  getEvent: (id) => request(`/v2/events/${encodeURIComponent(id)}`),
+  getEventStocks: (id) => request(`/v2/events/${encodeURIComponent(id)}/stocks`),
+  
+  // Validation API
+  getValidationEvent: (id) => request(`/v2/validation/events/${encodeURIComponent(id)}`),
+  getValidationSummary: (type, key = "") => {
+    let url = `/v2/validation/summary?summary_type=${encodeURIComponent(type)}`;
+    if (key) url += `&key=${encodeURIComponent(key)}`;
+    return request(url);
+  },
+  
+  // Chat & Interactive API
+  chatQuery: (query) => request("/v2/chat/query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query })
+  }),
+  submitGraphFeedback: (relationId, action, details = "") => request(`/v2/graph/relations/${encodeURIComponent(relationId)}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, details })
+  }),
+  uploadPrivateText: (text) => request("/v2/input/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  })
+};
