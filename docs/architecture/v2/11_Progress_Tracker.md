@@ -13,8 +13,8 @@
 - [x] **Phase 3: Reasoning Engine MVP** (100%)
 - [x] **Phase 4: LLM 抽取候选关系** (100%)
 - [x] **Phase 5: Validation Loop 验证闭环** (100%)
-- [ ] **Phase 6: Web Explainability 前端解释层** (0%)
-- [ ] **Phase 7: Interaction Layer 交互层** (0%)
+- [x] **Phase 6: Web Explainability 前端解释层** (100%)
+- [x] **Phase 7: Interaction Layer 交互层** (80% - Webhook 暂缓)
 
 ---
 
@@ -99,34 +99,34 @@
 ---
 
 ### Phase 6: Web Explainability 前端解释层 
-*状态: 待开始 (Pending)*
+*状态: 已完成 (Completed)*
 
-- [ ] **API 适配**
-  - [ ] `graphApi`, `eventApi`, `stockExplainApi`, `validationApi` 联调对接
-- [ ] **UI 页面开发**
-  - [ ] 事件看板 (Event Dashboard)
-  - [ ] 供应链探索 (Supply Chain Explorer)
-  - [ ] 推理逻辑卡 (Why This Stock)
-  - [ ] 验证监控台 (Validation Panel)
-- [ ] **状态与异常处理**
-  - [ ] 骨架屏、低置信提醒、过期数据(Stale Data)强提示
-- [ ] **测试与验收**
-  - [ ] 页面端能够完整展示事件从发生到推理、最终影响股票及验证胜率的全链路
+- [x] **API 适配**
+  - [x] `graphApi`, `eventApi`, `stockExplainApi`, `validationApi` 联调对接
+- [x] **UI 页面开发**
+  - [x] 事件看板 (Event Dashboard)
+  - [x] 供应链探索 (Supply Chain Explorer)
+  - [x] 推理逻辑卡 (Why This Stock)
+  - [x] 验证监控台 (Validation Panel)
+- [x] **状态与异常处理**
+  - [x] 骨架屏、低置信提醒、过期数据(Stale Data)强提示
+- [x] **测试与验收**
+  - [x] 页面端能够完整展示事件从发生到推理、最终影响股票及验证胜率的全链路
 
 ---
 
 ### Phase 7: Interaction Layer 交互层 
-*状态: 待开始 (Pending)*
+*状态: 已完成 (Completed)*
 
-- [ ] **对话查询模块 (NL2Graph)**
-  - [ ] 意图识别小模型接入，拦截直连数据库请求
-- [ ] **纠错反馈与主动干预闭环**
-  - [ ] Web 端实装报错、降权按钮
-  - [ ] 低置信度数据的“审核工作流卡片”
-- [ ] **动态监控预警系统**
+- [x] **对话查询模块 (NL2Graph)**
+  - [x] 意图识别小模型接入，拦截直连数据库请求
+- [x] **纠错反馈与主动干预闭环**
+  - [x] Web 端实装报错、降权按钮
+  - [x] 低置信度数据的“审核工作流卡片”
+- [ ] **动态监控预警系统** (用户指定暂缓)
   - [ ] 推送条件阈值判定引擎
   - [ ] 消息通道(Webhook)发送
-- [ ] **即时主动喂入**
-  - [ ] 支持用户在前端上传私有文本触发即时推理 (打上 `user_private` 标签)
-- [ ] **测试与验收**
-  - [ ] 自然语言转 API 成功；手工改判数据被锁定高置信。
+- [x] **即时主动喂入**
+  - [x] 支持用户在前端上传私有文本触发即时推理 (打上 `user_private` 标签)
+- [x] **测试与验收**
+  - [x] 自然语言转 API 成功；手工改判数据被锁定高置信。
