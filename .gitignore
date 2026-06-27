@@ -11,3 +11,4 @@ data/
 .codex/
 AGENTS.md
 .agent/
+tmp/

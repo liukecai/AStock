@@ -21,7 +21,7 @@ MODEL_IDS = {
 }
 
 # LLM Config
-LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
+LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() in ("true", "1", "yes", "on")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4-turbo")
