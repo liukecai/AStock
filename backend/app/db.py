@@ -419,19 +419,21 @@ from sqlalchemy.orm import sessionmaker
 
 _engine = None
 _SessionLocal = None
+_engine_url = None
 
 def get_engine():
-    global _engine, _SessionLocal
-    if _engine is None:
-        db_url = settings.database_url or "sqlite:///" + str(_db_path())
+    global _engine, _SessionLocal, _engine_url
+    db_url = settings.database_url or "sqlite:///" + str(_db_path())
+    if _engine is None or _engine_url != db_url:
         # SQLite needs specific connect args
         connect_args = {}
         if db_url.startswith("sqlite"):
             connect_args = {"check_same_thread": False}
-            # For Postgres
+        else:
             db_url = db_url.replace("postgres:5432", "localhost:5432")
         _engine = create_engine(db_url, connect_args=connect_args)
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+        _engine_url = db_url
     return _engine
 
 @contextmanager
@@ -500,13 +502,46 @@ def _run_ddl(conn: Any, ddl: str) -> None:
 
 
 def init_db() -> None:
-    """Initialize database. Schema creation is now handled by Alembic for V2, but we still run V1 SCHEMA for tests/SQLite."""
+    """Initialize both legacy SQLite tables and V2 KG tables."""
     from .models.base import Base
-    from .models.v2_kg import CandidateEntity, CandidateRelation, KGEntity, KGRelation
-    Base.metadata.create_all(get_engine())
     with connect() as conn:
         _run_ddl(conn, SCHEMA)
         _seed_commodity_graph(conn)
+    from .models.v2_kg import (
+        CandidateEntity,
+        CandidateRelation,
+        EventImpact,
+        EventInstance,
+        EventValidationResult,
+        Evidence,
+        KGChangeLog,
+        KGEntity,
+        KGRelation,
+        ReasoningPath,
+        RelationEvidence,
+        StockEventScore,
+        StockExposure,
+        ValidationSummary,
+    )
+    Base.metadata.create_all(
+        get_engine(),
+        tables=[
+            KGEntity.__table__,
+            KGRelation.__table__,
+            Evidence.__table__,
+            RelationEvidence.__table__,
+            CandidateEntity.__table__,
+            CandidateRelation.__table__,
+            EventValidationResult.__table__,
+            ValidationSummary.__table__,
+            KGChangeLog.__table__,
+            EventInstance.__table__,
+            EventImpact.__table__,
+            ReasoningPath.__table__,
+            StockExposure.__table__,
+            StockEventScore.__table__,
+        ],
+    )
 
 
 

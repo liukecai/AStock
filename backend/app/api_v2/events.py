@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Query, HTTPException
-from typing import Annotated, Optional
+from fastapi import APIRouter, Query
+from typing import Optional
 from .. import db
 import json
+from ..services.event_engine import get_event_detail_by_id
 
 router = APIRouter()
 
@@ -25,11 +26,29 @@ def get_events(
         where += " AND event_type = ?"
         params.append(event_type)
         
-    total = db.row(f"SELECT COUNT(*) as count FROM events {where}", tuple(params))["count"]
+    total = db.row(f"SELECT COUNT(*) as count FROM event_instances {where}", tuple(params))["count"]
     
     offset = (page - 1) * page_size
-    query = f"SELECT * FROM events {where} ORDER BY published_at DESC LIMIT ? OFFSET ?"
-    events = db.rows(query, tuple(params + [page_size, offset]))
+    query = (
+        f"SELECT *, event_id AS id FROM event_instances {where} "
+        "ORDER BY occurred_at DESC LIMIT ? OFFSET ?"
+    )
+    events = []
+    for event in db.rows(query, tuple(params + [page_size, offset])):
+        event_dict = dict(event)
+        impacts = db.rows(
+            """
+            SELECT i.*, k.name AS commodity
+            FROM event_impacts i
+            JOIN kg_entities k ON k.entity_id = i.entity_id
+            WHERE i.event_id=?
+            """,
+            (event_dict["id"],),
+        )
+        event_dict["commodity_impacts"] = [dict(impact) for impact in impacts]
+        if isinstance(event_dict.get("entities_json"), str):
+            event_dict["entities_json"] = json.loads(event_dict["entities_json"])
+        events.append(event_dict)
     
     return wrap_response(
         data=events,
@@ -38,15 +57,23 @@ def get_events(
 
 @router.get("/{event_id}")
 def get_event(event_id: str):
-    event = db.row("SELECT * FROM events WHERE id=?", (event_id,))
+    event = get_event_detail_by_id(event_id)
     if not event:
         return wrap_response(error={"code": "EVENT_NOT_FOUND", "message": "Event not found"})
-    return wrap_response(data=dict(event))
+    return wrap_response(data=event)
 
 @router.get("/{event_id}/impacts")
 def get_event_impacts(event_id: str):
-    impacts = db.rows("SELECT * FROM commodity_impacts WHERE event_id=?", (event_id,))
-    return wrap_response(data=impacts)
+    impacts = db.rows(
+        """
+        SELECT i.*, k.name AS commodity
+        FROM event_impacts i
+        JOIN kg_entities k ON k.entity_id = i.entity_id
+        WHERE i.event_id=?
+        """,
+        (event_id,),
+    )
+    return wrap_response(data=[dict(impact) for impact in impacts])
 
 @router.get("/{event_id}/paths")
 def get_event_paths(event_id: str):
@@ -55,8 +82,34 @@ def get_event_paths(event_id: str):
 
 @router.get("/{event_id}/stocks")
 def get_event_stocks(event_id: str):
-    stocks = db.rows("SELECT * FROM event_stock_scores WHERE event_id=? ORDER BY event_score DESC", (event_id,))
+    stocks = db.rows(
+        """
+        SELECT s.*, st.name, st.industry, r.nodes_json, r.edges_json
+        FROM stock_event_scores s
+        LEFT JOIN stocks st ON st.symbol = s.stock_code
+        LEFT JOIN reasoning_paths r
+          ON r.event_id = s.event_id AND r.stock_code = s.stock_code
+        WHERE s.event_id=?
+        ORDER BY s.rank ASC, s.final_score DESC
+        """,
+        (event_id,),
+    )
     for stock in stocks:
-        stock["causal_chain"] = json.loads(stock["causal_chain"]) if stock.get("causal_chain") else {}
-        stock["evidence"] = json.loads(stock["evidence"]) if stock.get("evidence") else []
-    return wrap_response(data=stocks)
+        stock["score_breakdown_json"] = (
+            json.loads(stock["score_breakdown_json"])
+            if isinstance(stock.get("score_breakdown_json"), str)
+            else (stock.get("score_breakdown_json") or {})
+        )
+        stock["nodes_json"] = (
+            json.loads(stock["nodes_json"])
+            if isinstance(stock.get("nodes_json"), str)
+            else (stock.get("nodes_json") or [])
+        )
+        stock["edges_json"] = (
+            json.loads(stock["edges_json"])
+            if isinstance(stock.get("edges_json"), str)
+            else (stock.get("edges_json") or [])
+        )
+        stock["direction"] = stock["score_breakdown_json"].get("direction", "benefit")
+        stock["event_score"] = stock.get("final_score", 0.0)
+    return wrap_response(data=[dict(stock) for stock in stocks])

@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app import db
 from app.config import settings
 from app.main import app
 
@@ -102,6 +103,124 @@ def test_admin_auth_required_for_mutations(tmp_path):
             )
             assert rerun.status_code == 200
             assert "signal_date" in rerun.json()
+    finally:
+        object.__setattr__(settings, "database_path", original_path)
+        object.__setattr__(settings, "enable_scheduler", original_scheduler)
+        object.__setattr__(settings, "demo_data", original_demo)
+        object.__setattr__(settings, "admin_secret", original_admin_secret)
+
+
+def test_legacy_events_filters_and_init_db_idempotent(tmp_path):
+    database_path = tmp_path / "test-events.db"
+    original_path = settings.database_path
+    original_scheduler = settings.enable_scheduler
+    original_demo = settings.demo_data
+    original_admin_secret = settings.admin_secret
+    object.__setattr__(settings, "database_path", database_path)
+    object.__setattr__(settings, "enable_scheduler", False)
+    object.__setattr__(settings, "demo_data", False)
+    object.__setattr__(settings, "admin_secret", None)
+
+    try:
+        db.init_db()
+        db.init_db()
+
+        with db.connect() as conn:
+            db._exec(
+                conn,
+                """
+                INSERT INTO stocks(symbol, name, industry, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                ("601857", "中国石油", "石油石化", "2026-06-27T09:00:00"),
+            )
+            db._exec(
+                conn,
+                """
+                INSERT INTO kg_entities(
+                    entity_id, entity_type, name, canonical_name, aliases_json,
+                    description, metadata_json, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "comm_oil",
+                    "Commodity",
+                    "oil",
+                    "oil",
+                    "[]",
+                    "",
+                    "{}",
+                    "active",
+                    "2026-06-27T09:00:00",
+                    "2026-06-27T09:00:00",
+                ),
+            )
+            db._exec(
+                conn,
+                """
+                INSERT INTO event_instances(
+                    event_id, event_type, subtype, title, description,
+                    entities_json, intensity, direction, occurred_at, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "evt_filter",
+                    "geo_conflict",
+                    "general",
+                    "原油供应受扰",
+                    "测试事件",
+                    '[{"entity_id":"comm_oil","name":"oil"}]',
+                    0.8,
+                    "benefit",
+                    "2026-06-27T09:00:00",
+                    "2026-06-27T09:00:00",
+                ),
+            )
+            db._exec(
+                conn,
+                """
+                INSERT INTO event_impacts(impact_id, event_id, entity_id, impact_type, impact_score)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("impact_filter", "evt_filter", "comm_oil", "supply_disruption", 0.8),
+            )
+            db._exec(
+                conn,
+                """
+                INSERT INTO stock_event_scores(
+                    event_id, stock_code, final_score, exposure_score, trend_score,
+                    sentiment_score, volume_score, event_intensity, validation_score,
+                    score_breakdown_json, confidence, rank, label, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "evt_filter",
+                    "601857",
+                    88.0,
+                    75.0,
+                    60.0,
+                    55.0,
+                    50.0,
+                    0.8,
+                    0.0,
+                    '{"direction":"harm"}',
+                    0.9,
+                    1,
+                    "watch",
+                    "2026-06-27T09:00:00",
+                ),
+            )
+
+        with TestClient(app) as client:
+            commodity_resp = client.get("/api/events?commodity=oil")
+            assert commodity_resp.status_code == 200
+            commodity_ids = [item["id"] for item in commodity_resp.json()["events"]]
+            assert commodity_ids == ["evt_filter"]
+
+            direction_resp = client.get("/api/events?direction=harm")
+            assert direction_resp.status_code == 200
+            direction_ids = [item["id"] for item in direction_resp.json()["events"]]
+            assert direction_ids == ["evt_filter"]
     finally:
         object.__setattr__(settings, "database_path", original_path)
         object.__setattr__(settings, "enable_scheduler", original_scheduler)

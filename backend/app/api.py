@@ -64,6 +64,12 @@ def _decode_signal(item: dict) -> dict:
     return item
 
 
+def _score_direction_sql() -> str:
+    if db._is_pg():
+        return "ess.score_breakdown_json::jsonb ->> 'direction'"
+    return "json_extract(score_breakdown_json, '$.direction')"
+
+
 def _require_admin(x_admin_secret: Annotated[str | None, Header()] = None) -> None:
     if not settings.admin_secret:
         return
@@ -508,15 +514,21 @@ def get_events(
     params = []
 
     if commodity:
-        where_clauses.append("e.event_id IN (SELECT event_id FROM event_impacts WHERE commodity=?)")
+        where_clauses.append(
+            "EXISTS ("
+            "SELECT 1 FROM event_impacts ei "
+            "JOIN kg_entities k ON k.entity_id = ei.entity_id "
+            "WHERE ei.event_id = e.event_id AND LOWER(k.name) = LOWER(?)"
+            ")"
+        )
         params.append(commodity)
     if event_type:
         where_clauses.append("e.event_type = ?")
         params.append(event_type)
     if direction:
         where_clauses.append(
-            "EXISTS (SELECT 1 FROM event_stock_scores ess "
-            "WHERE ess.event_id=e.event_id AND jsonb_extract_path_text(ess.score_breakdown_json, 'direction')=?)"
+            "EXISTS (SELECT 1 FROM stock_event_scores ess "
+            f"WHERE ess.event_id=e.event_id AND {_score_direction_sql()}=?)"
         )
         params.append(direction)
 
