@@ -11,8 +11,8 @@
 - [x] **Phase 1: KG Schema 与基础表** (100%)
 - [x] **Phase 2: YAML 规则迁移** (100%)
 - [x] **Phase 3: Reasoning Engine MVP** (100%)
-- [ ] **Phase 4: LLM 抽取候选关系** (0%)
-- [ ] **Phase 5: Validation Loop 验证闭环** (0%)
+- [x] **Phase 4: LLM 抽取候选关系** (100%)
+- [x] **Phase 5: Validation Loop 验证闭环** (100%)
 - [ ] **Phase 6: Web Explainability 前端解释层** (0%)
 - [ ] **Phase 7: Interaction Layer 交互层** (0%)
 
@@ -85,16 +85,16 @@
 ---
 
 ### Phase 5: Validation Loop 验证闭环 
-*状态: 待开始 (Pending)*
+*状态: 已完成 (Completed)*
 
-- [ ] **验证引擎开发**
-  - [ ] 实现 `validation_engine.py` 与 `return_calculator.py`
-  - [ ] 计算 T+1/3/5/10 的绝对与超额收益
-- [ ] **结果统计与回写**
-  - [ ] 实现 `validation_summary_service.py` 进行批处理聚合
-  - [ ] 将高胜率/低胜率结果反馈到关系权重系数中
-- [ ] **测试与验收**
-  - [ ] 跑通某类历史事件的批量回溯，成功在表中生成有效统计记录
+- [x] **验证引擎开发**
+  - [x] 实现 `validation_engine.py` 与 `return_calculator.py`
+  - [x] 计算 T+1/3/5/10 的绝对与超额收益
+- [x] **结果统计与回写**
+  - [x] 实现 `validation_summary_service.py` 进行批处理聚合
+  - [x] 将高胜率/低胜率结果反馈到关系权重系数中
+- [x] **测试与验收**
+  - [x] 跑通某类历史事件的批量回溯，成功在表中生成有效统计记录
 
 ---
 

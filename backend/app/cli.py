@@ -15,7 +15,8 @@ from .services.demo import seed_demo_data
 from .services.market import update_market_data
 from .services.pipeline import run_signal_pipeline
 from .services.rss_news import rescore_rss_news, update_rss_news
-
+from .services.validation_engine import run_event_validation
+from .services.validation_summary_service import generate_validation_summary, override_relation_weight
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="aquant")
@@ -33,6 +34,9 @@ def main() -> None:
             "backtest",
             "calibrate",
             "extract-report",
+            "run-validation",
+            "run-validation-summary",
+            "update-kg-weight",
         ],
     )
     parser.add_argument("--force", action="store_true")
@@ -46,6 +50,9 @@ def main() -> None:
     parser.add_argument("--output-dir")
     parser.add_argument("--file", help="File path for extraction")
     parser.add_argument("--extract-type", choices=["profile", "event"], default="profile")
+    parser.add_argument("--event-id", help="Event ID for validation")
+    parser.add_argument("--relation-id", help="Relation ID for weight update")
+    parser.add_argument("--weight", type=float, help="New weight value")
     args = parser.parse_args()
 
     if args.command == "seed":
@@ -104,6 +111,24 @@ def main() -> None:
             else:
                 res = extractor.extract_event(text, source_evidence_id="cli_test", db=session)
             print(res.model_dump_json(indent=2))
+    elif args.command == "run-validation":
+        if not args.event_id:
+            print("Error: --event-id is required for run-validation")
+            return
+        run_event_validation(args.event_id)
+        print(f"Validation completed for event {args.event_id}")
+    elif args.command == "run-validation-summary":
+        generate_validation_summary()
+        print("Validation summary generated and weights updated.")
+    elif args.command == "update-kg-weight":
+        if not args.relation_id or args.weight is None:
+            print("Error: --relation-id and --weight are required for update-kg-weight")
+            return
+        success = override_relation_weight(args.relation_id, args.weight, reason="CLI manual update")
+        if success:
+            print(f"Successfully updated relation {args.relation_id} to weight {args.weight}")
+        else:
+            print(f"Failed to update relation {args.relation_id}")
 
 
 if __name__ == "__main__":

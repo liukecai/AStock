@@ -500,11 +500,12 @@ def _run_ddl(conn: Any, ddl: str) -> None:
 
 
 def init_db() -> None:
-    """Initialize database. Schema creation is now handled by Alembic."""
+    """Initialize database. Schema creation is now handled by Alembic for V2, but we still run V1 SCHEMA for tests/SQLite."""
     from .models.base import Base
     from .models.v2_kg import CandidateEntity, CandidateRelation, KGEntity, KGRelation
     Base.metadata.create_all(get_engine())
     with connect() as conn:
+        _run_ddl(conn, SCHEMA)
         _seed_commodity_graph(conn)
 
 
