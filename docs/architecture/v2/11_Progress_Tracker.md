@@ -71,16 +71,16 @@
 ---
 
 ### Phase 4: LLM 抽取候选关系 
-*状态: 待开始 (Pending)*
+*状态: 已完成 (Completed)*
 
-- [ ] **抽取服务集成**
-  - [ ] 实现 `llm_extract_company_profile()` 和 `llm_extract_event()`
-  - [ ] 构建并管理基于场景的 Prompt 模板 (年报/公告/新闻)
-- [ ] **候选关系流转**
-  - [ ] 将 LLM JSON 提取结果校验并写入 `candidate_relations` 表
-  - [ ] 开发人工审核 API (Approve/Reject)
-- [ ] **测试与验收**
-  - [ ] 丢入一篇研报文本，成功在数据库候选表中生成结构化数据及超链接证据
+- [x] **抽取服务集成**
+  - [x] 实现 `llm_extract_company_profile()` 和 `llm_extract_event()`
+  - [x] 构建并管理基于场景的 Prompt 模板 (年报/公告/新闻)
+- [x] **候选关系流转**
+  - [x] 将 LLM JSON 提取结果校验并写入 `candidate_relations` 表
+  - [x] 开发人工审核 API (Approve/Reject)
+- [x] **测试与验收**
+  - [x] 丢入一篇研报文本，成功在数据库候选表中生成结构化数据及超链接证据
 
 ---
 
