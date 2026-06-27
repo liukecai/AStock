@@ -20,10 +20,13 @@ def _md5_id(entity_type: str, name: str) -> str:
 def _md5_rel_id(src: str, rel_type: str, tgt: str) -> str:
     return hashlib.md5(f"{src}:{rel_type}:{tgt}".encode('utf-8')).hexdigest()
 
+
+def _resolve_db_url() -> str:
+    return settings.database_url or "postgresql://aquant:changeme@postgres:5432/aquant"
+
 def load_yaml_to_kg():
     # Setup DB
-    db_url = settings.database_url or "postgresql://aquant:changeme@localhost:5432/aquant"
-    db_url = db_url.replace("postgres:5432", "localhost:5432")
+    db_url = _resolve_db_url()
     engine = create_engine(db_url)
     Session = sessionmaker(bind=engine)
     session = Session()
