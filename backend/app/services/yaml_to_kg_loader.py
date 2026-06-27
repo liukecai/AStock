@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from app.config import settings
 from app.models.v2_kg import KGEntity, KGRelation
+from app.pg_dsn import resolve_pg_dsn
 
 def _md5_id(entity_type: str, name: str) -> str:
     return hashlib.md5(f"{entity_type}:{name}".encode('utf-8')).hexdigest()
@@ -22,7 +23,7 @@ def _md5_rel_id(src: str, rel_type: str, tgt: str) -> str:
 
 
 def _resolve_db_url() -> str:
-    return settings.database_url or "postgresql://aquant:changeme@postgres:5432/aquant"
+    return resolve_pg_dsn(settings.database_url)
 
 def load_yaml_to_kg():
     # Setup DB

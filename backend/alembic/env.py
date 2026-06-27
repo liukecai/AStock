@@ -22,8 +22,9 @@ from app.models.base import Base
 import app.models  # ensure models are imported
 
 from app.config import settings
-db_url = settings.database_url or "postgresql://aquant:changeme@localhost:5432/aquant"
-db_url = db_url.replace("postgres:5432", "localhost:5432")
+from app.pg_dsn import resolve_pg_dsn
+
+db_url = resolve_pg_dsn(settings.database_url)
 config.set_main_option("sqlalchemy.url", db_url)
 
 target_metadata = Base.metadata

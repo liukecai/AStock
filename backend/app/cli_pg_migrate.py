@@ -6,7 +6,7 @@ One-shot SQLite → PostgreSQL data migration script.
 Usage:
     PYTHONPATH=. python -m app.cli_pg_migrate \
         --sqlite /app/data/aquant.db \
-        --pg "postgresql://aquant:changeme@localhost:5432/aquant"
+        --pg "postgresql://aquant:changeme@postgres:5432/aquant"
 
 Steps:
 1. Read all rows from the SQLite database in foreign-key-safe order.
