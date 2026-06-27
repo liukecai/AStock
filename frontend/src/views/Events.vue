@@ -309,7 +309,7 @@ onMounted(loadEvents);
               </span>
             </div>
             <h4 class="event-title">{{ ev.title }}</h4>
-            <span class="event-date">{{ ev.published_at.slice(0, 16).replace('T', ' ') }}</span>
+            <span class="event-date">{{ ev.occurred_at ? ev.occurred_at.slice(0, 16).replace('T', ' ') : '' }}</span>
           </div>
           <div v-if="!loading && !events.length" class="empty-state">未找到匹配的事件</div>
         </div>
@@ -332,7 +332,7 @@ onMounted(loadEvents);
             <span class="badge type-badge" :class="selectedEvent.event_type">
               {{ getEventTypeLabel(selectedEvent.event_type) }}
             </span>
-            <span class="time-meta">{{ selectedEvent.published_at.replace('T', ' ').slice(0, 19) }}</span>
+            <span class="time-meta">{{ selectedEvent.occurred_at ? selectedEvent.occurred_at.replace('T', ' ').slice(0, 19) : '' }}</span>
           </div>
           <h2>{{ selectedEvent.title }}</h2>
           <p class="summary-text" v-if="selectedEvent.summary">{{ selectedEvent.summary }}</p>
