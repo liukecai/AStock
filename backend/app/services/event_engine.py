@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import hashlib
 import json
 import sys
@@ -8,260 +6,14 @@ from typing import Any
 
 from .. import db
 from .event_llm import extract_event_llm
-from .commodity_loader import get_commodity_kb, reload_kb as _reload_kb
-
-# ---------------------------------------------------------------------------
-# COMMODITY_KB: loaded from config/commodity_graph/*.yaml at module import.
-# Falls back to the hardcoded dict below if YAML loading fails or returns empty.
-# ---------------------------------------------------------------------------
-
-_HARDCODED_COMMODITY_KB = {
-    "tungsten": {
-        "name": "钨",
-        "keywords": ["钨", "tungsten", "中钨", "厦钨", "硬质合金", "钨矿"],
-        "exact_stocks": {
-            "000657": {"relationship": "upstream", "name": "中钨高新"},
-            "600549": {"relationship": "upstream", "name": "厦门钨业"},
-            "603993": {"relationship": "upstream", "name": "洛阳钼业"}
-        },
-        "sector_keywords": ["有色金属", "小金属", "硬质合金", "材料", "金属"],
-        "default_sector": "有色金属",
-        "upstream_sectors": ["有色金属", "小金属", "硬质合金"],
-        "downstream_sectors": []
-    },
-    "WF6": {
-        "name": "六氟化钨",
-        "keywords": ["六氟化钨", "WF6", "中船特气", "特气", "电子气体"],
-        "exact_stocks": {
-            "688146": {"relationship": "upstream", "name": "中船特气"}
-        },
-        "sector_keywords": ["电子化学品", "特种气体", "化学制品", "半导体材料"],
-        "default_sector": "电子化学品",
-        "upstream_sectors": ["电子化学品", "特种气体", "化学制品"],
-        "downstream_sectors": ["半导体", "电子", "半导体材料"]
-    },
-    "oil": {
-        "name": "原油/石油",
-        "keywords": ["原油", "石油", "oil", "opec", "欧佩克", "油价", "布伦特", "汽油", "柴油"],
-        "exact_stocks": {
-            "601857": {"relationship": "upstream", "name": "中国石油"},
-            "600028": {"relationship": "upstream", "name": "中国石化"},
-            "601808": {"relationship": "upstream", "name": "中海油服"}
-        },
-        "sector_keywords": ["石油石化", "采掘服务", "油气开采", "化工", "航空机场"],
-        "default_sector": "石油石化",
-        "upstream_sectors": ["石油石化", "采掘服务", "油气开采"],
-        "downstream_sectors": ["化工", "航空机场", "航空", "机场"]
-    },
-    "copper": {
-        "name": "铜",
-        "keywords": ["铜", "copper", "铜价", "精炼铜", "电解铜"],
-        "exact_stocks": {
-            "600362": {"relationship": "upstream", "name": "江西铜业"},
-            "601899": {"relationship": "upstream", "name": "紫金矿业"},
-            "000878": {"relationship": "upstream", "name": "云南铜业"}
-        },
-        "sector_keywords": ["有色金属", "铜", "铜业", "电力设备"],
-        "default_sector": "有色金属",
-        "upstream_sectors": ["有色金属", "铜", "铜业"],
-        "downstream_sectors": ["电力设备"]
-    },
-    "gold": {
-        "name": "黄金",
-        "keywords": ["黄金", "gold", "金价", "贵金属", "金矿"],
-        "exact_stocks": {
-            "600547": {"relationship": "upstream", "name": "山东黄金"},
-            "600489": {"relationship": "upstream", "name": "中金黄金"},
-            "600988": {"relationship": "upstream", "name": "赤峰黄金"}
-        },
-        "sector_keywords": ["贵金属", "黄金", "有色金属"],
-        "default_sector": "贵金属",
-        "upstream_sectors": ["贵金属", "黄金", "有色金属"],
-        "downstream_sectors": []
-    },
-    "lithium": {
-        "name": "锂",
-        "keywords": ["锂", "lithium", "碳酸锂", "氢氧化锂", "盐湖提锂", "电池级碳酸锂"],
-        "exact_stocks": {
-            "002466": {"relationship": "upstream", "name": "天齐锂业"},
-            "002460": {"relationship": "upstream", "name": "赣锋锂业"},
-            "000792": {"relationship": "upstream", "name": "盐湖股份"}
-        },
-        "sector_keywords": ["能源金属", "电池材料", "锂电池", "汽车", "有色金属"],
-        "default_sector": "能源金属",
-        "upstream_sectors": ["能源金属", "电池材料"],
-        "downstream_sectors": ["锂电池", "汽车", "电力设备"]
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Load from YAML; fall back to the hardcoded dict if YAML loading fails.
-# ---------------------------------------------------------------------------
-_yaml_kb = get_commodity_kb()
-if _yaml_kb:
-    COMMODITY_KB = _yaml_kb
-    print(
-        f"[event_engine] 已从 YAML 加载 {len(COMMODITY_KB)} 种商品知识库。",
-        file=sys.stderr,
-    )
-else:
-    COMMODITY_KB = _HARDCODED_COMMODITY_KB
-    print(
-        "[event_engine] YAML 加载失败，回退到硬编码知识库。",
-        file=sys.stderr,
-    )
-
+from .event_extractor import extract_event_rule_based, identify_commodity_from_db
+from .graph_querier import query_impacted_stocks
+from .exposure_calculator import calculate_exposure
+from .scoring_engine import calculate_stock_score, rank_stocks
 
 def reload_commodity_kb() -> None:
-    """热重载商品知识库（YAML → COMMODITY_KB）。"""
-    global COMMODITY_KB
-    new_kb = _reload_kb()
-    if new_kb:
-        COMMODITY_KB = new_kb
-    else:
-        print(
-            "[event_engine] reload_commodity_kb: YAML 加载失败，保留现有知识库。",
-            file=sys.stderr,
-        )
-
-
-EVENT_TYPE_KEYWORDS = {
-    "geo_conflict": ["地缘", "战争", "军事", "红海", "袭击", "制裁", "冲突", "俄乌", "巴以", "紧张局势"],
-    "supply_shock": [
-        "供应中断", "减产", "停产", "断供", "供应受限", "紧张", "短缺",
-        "吃紧", "供给偏紧", "库存大跌", "库存减少", "供应过剩",
-        "供给过剩", "库存激增", "增产", "扩产", "恢复产量", "产量恢复",
-        "提高产量",
-        "需求疲弱", "需求下降", "需求萎缩", "消费低迷", "暴涨", "大涨",
-        "上涨", "暴跌", "大跌", "下跌",
-    ],
-    "policy_change": ["政策", "收储", "出口管制", "加税", "关税", "环保督察", "规划", "退税", "补贴", "准入"],
-    "disruption": ["罢工", "地震", "停电", "事故", "洪涝", "飓风", "火灾", "暴雨", "恶劣天气"]
-}
-
-def identify_commodity(text: str) -> str | None:
-    lowered = text.lower()
-    # Check WF6 first to avoid conflict with tungsten (钨) in "六氟化钨"
-    if any(kw in lowered for kw in ["六氟化钨", "wf6", "中船特气"]):
-        return "WF6"
-    for comm, cfg in COMMODITY_KB.items():
-        if comm == "WF6":
-            continue
-        if any(kw in lowered for kw in cfg["keywords"]):
-            return comm
-    return None
-
-def identify_event_type(text: str) -> tuple[str, str] | None:
-    lowered = text.lower()
-    best_type = ""
-    max_matches = 0
-    for etype, kws in EVENT_TYPE_KEYWORDS.items():
-        matches = sum(1 for kw in kws if kw in lowered)
-        if matches > max_matches:
-            max_matches = matches
-            best_type = etype
-    if not best_type:
-        return None
-
-    # Determine subtype
-    subtype = "general"
-    if best_type == "geo_conflict":
-        subtype = "geopolitics"
-    elif best_type == "supply_shock":
-        if "减产" in lowered or "停产" in lowered:
-            subtype = "production_cut"
-        elif "短缺" in lowered or "偏紧" in lowered:
-            subtype = "shortage"
-    elif best_type == "policy_change":
-        if "出口" in lowered or "管制" in lowered:
-            subtype = "export_control"
-        elif "收储" in lowered:
-            subtype = "national_reserve"
-    elif best_type == "disruption":
-        if "罢工" in lowered:
-            subtype = "strike"
-        elif "地震" in lowered or "天气" in lowered or "洪涝" in lowered:
-            subtype = "natural_disaster"
-    return best_type, subtype
-
-def identify_commodity_shock(text: str) -> str:
-    lowered = text.lower()
-    if any(
-        kw in lowered
-        for kw in ["恢复产量", "产量恢复", "增产", "扩产", "提高产量"]
-    ):
-        return "supply_increase"
-    if any(kw in lowered for kw in ["需求疲弱", "需求下降", "需求萎缩", "消费低迷"]):
-        return "demand_weakness"
-    if any(kw in lowered for kw in ["供应过剩", "供给过剩", "库存激增", "产能过剩"]):
-        return "oversupply"
-    if any(kw in lowered for kw in ["支持", "补贴", "收储", "利好政策", "鼓励", "规划"]):
-        return "policy_support"
-    if any(kw in lowered for kw in ["中断", "停产", "减产", "停工", "关闭", "罢工", "爆炸", "事故"]):
-        return "supply_disruption"
-    if any(kw in lowered for kw in ["短缺", "紧张", "不足", "缺口", "吃紧"]):
-        return "supply_shortage"
-    return "supply_shortage"
-
-
-def commodity_impact_direction(text: str, impact_type: str) -> str:
-    lowered = text.lower()
-    price_decline = ["暴跌", "大跌", "下跌", "跳水", "价格走低", "价格承压"]
-    if impact_type in {"demand_weakness", "oversupply", "supply_increase"}:
-        return "harm"
-    if any(keyword in lowered for keyword in price_decline):
-        return "harm"
-    return "benefit"
-
-
-def extract_intensity_confidence(title: str, summary: str) -> tuple[float, float]:
-    text = (title + " " + summary).lower()
-    intensity = 0.6
-    confidence = 0.85
-    
-    high_intensity = ["暴涨", "大涨", "急剧", "爆发", "袭击", "中断", "完全", "重创", "历史新高", "大跌", "暴跌"]
-    med_intensity = ["上涨", "下跌", "受限", "减产", "停产", "调整", "偏紧", "收储"]
-    if any(kw in text for kw in high_intensity):
-        intensity = 0.9
-    elif any(kw in text for kw in med_intensity):
-        intensity = 0.75
-
-    low_conf = ["可能", "预计", "或将", "拟", "传闻", "不确定", "猜测"]
-    high_conf = ["公告", "正式", "确认", "已", "决定", "签订", "达成"]
-    if any(kw in text for kw in low_conf):
-        confidence = 0.65
-    elif any(kw in text for kw in high_conf):
-        confidence = 0.95
-    return intensity, confidence
-
-
-def extract_event_rule_based(title: str, summary: str) -> dict[str, Any]:
-    commodity = identify_commodity(title + " " + summary)
-    if not commodity:
-        return {"is_relevant": False}
-
-    source_text = title + " " + summary
-    event_classification = identify_event_type(source_text)
-    if not event_classification:
-        return {"is_relevant": False}
-
-    event_type, subtype = event_classification
-    impact_type = identify_commodity_shock(source_text)
-    intensity, confidence = extract_intensity_confidence(title, summary)
-    direction = commodity_impact_direction(source_text, impact_type)
-
-    return {
-        "is_relevant": True,
-        "commodity": commodity,
-        "event_type": event_type,
-        "subtype": subtype,
-        "impact_type": impact_type,
-        "direction": direction,
-        "intensity": intensity,
-        "confidence": confidence,
-        "rationale": "Rule-based keyword extraction"
-    }
-
+    # Deprecated in V2. Left for backward compatibility.
+    pass
 
 def analyze_event_text(
     title: str,
@@ -273,7 +25,6 @@ def analyze_event_text(
         return None
 
     extraction_source = "rule"
-    extraction_raw_output = "{}"
     extracted = None
 
     try:
@@ -281,287 +32,218 @@ def analyze_event_text(
         if llm_res is not None:
             extracted = llm_res
             extraction_source = "llm"
-            extraction_raw_output = json.dumps(llm_res, ensure_ascii=False)
     except Exception as e:
-        # Graceful fallback to rule-based logic
         pass
 
     if extracted is None:
-        extracted = extract_event_rule_based(title, summary)
+        extracted = extract_event_rule_based(title, summary, db)
         extraction_source = "rule"
-        extraction_raw_output = json.dumps(extracted, ensure_ascii=False)
 
-    if not extracted.get("is_relevant"):
+    if not extracted or not extracted.get("is_relevant"):
         return None
 
-    commodity = extracted["commodity"]
-    event_type = extracted["event_type"]
-    subtype = extracted["subtype"]
-    impact_type = extracted["impact_type"]
-    direction = extracted["direction"]
-    intensity = extracted["intensity"]
-    confidence = extracted["confidence"]
+    commodity_name = extracted.get("commodity")
+    entity_id = extracted.get("entity_id")
+    event_type = extracted.get("event_type", "supply_shock")
+    subtype = extracted.get("subtype", "general")
+    impact_type = extracted.get("impact_type", "supply_shortage")
+    direction = extracted.get("direction", "benefit")
+    intensity = extracted.get("intensity", 0.6)
+    confidence = extracted.get("confidence", 0.8)
 
     if not published_at:
         published_at = datetime.now().isoformat()
+        
+    pub_dt = datetime.fromisoformat(published_at)
 
-    # Generate Event ID
     h = hashlib.md5(f"{title}-{published_at}".encode("utf-8")).hexdigest()
-    event_id = f"evt_{h[:16]}"
+    event_id = f"evt_v2_{h[:16]}"
     
     with db.connect() as conn:
+        # Save to V2 EventInstance
         db._exec(
             conn,
             """
-            INSERT INTO events(
-                id, news_id, title, summary, event_type, subtype,
-                intensity, direction, confidence, published_at, created_at,
-                extraction_source, extraction_raw_output
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                news_id=excluded.news_id,
-                title=excluded.title,
-                summary=excluded.summary,
+            INSERT INTO event_instances(
+                event_id, event_type, subtype, title, description,
+                entities_json, intensity, direction, occurred_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(event_id) DO UPDATE SET
                 event_type=excluded.event_type,
                 subtype=excluded.subtype,
+                title=excluded.title,
+                description=excluded.description,
+                entities_json=excluded.entities_json,
                 intensity=excluded.intensity,
                 direction=excluded.direction,
-                confidence=excluded.confidence,
-                published_at=excluded.published_at,
-                created_at=excluded.created_at,
-                extraction_source=excluded.extraction_source,
-                extraction_raw_output=excluded.extraction_raw_output
+                occurred_at=excluded.occurred_at
             """,
             (
-                event_id,
-                news_id,
-                title,
-                summary,
-                event_type,
-                subtype,
-                intensity,
-                direction,
-                confidence,
-                published_at,
-                datetime.now().isoformat(),
-                extraction_source,
-                extraction_raw_output
+                event_id, event_type, subtype, title, summary,
+                json.dumps([{"entity_id": entity_id, "name": commodity_name}]),
+                intensity, direction, pub_dt, datetime.now()
             )
         )
-        db._exec(conn, "DELETE FROM commodity_impacts WHERE event_id=?", (event_id,))
-        db._exec(conn, "DELETE FROM event_stock_scores WHERE event_id=?", (event_id,))
+        
+        # Save to V2 EventImpact
+        impact_id = f"imp_{h[:8]}_{entity_id}"
         db._exec(
             conn,
             """
-            INSERT INTO commodity_impacts(event_id, commodity, impact_type, direction)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO event_impacts(impact_id, event_id, entity_id, impact_type, impact_score)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(impact_id) DO UPDATE SET impact_score=excluded.impact_score
             """,
-            (event_id, commodity, impact_type, direction)
+            (impact_id, event_id, entity_id, impact_type, intensity)
         )
         
-    # Query all active stocks in the pool
-    stocks = db.rows("SELECT symbol, name, industry FROM stocks")
-    kb = COMMODITY_KB[commodity]
+    # Reason
+    paths = query_impacted_stocks(db, entity_id, context_date=pub_dt, max_depth=4)
+    scored_paths = calculate_exposure(paths, depth_decay_factor=0.8)
     
-    # Calculate Event Impact
-    base_impact = {
-        "geo_conflict": 90.0,
-        "supply_shock": 80.0,
-        "policy_change": 75.0,
-        "disruption": 70.0
-    }.get(event_type, 60.0)
-    event_impact = min(max(base_impact + (intensity - 0.5) * 20.0, 0.0), 100.0) * confidence
-    event_impact = round(event_impact, 2)
+    # Calculate scores
+    final_stock_scores = []
     
-    # Save scores and evidence
-    stock_scores_to_save = []
-    
-    # For mapping
-    for stock in stocks:
-        symbol = stock["symbol"]
-        name = stock["name"]
-        industry = stock["industry"]
-        
-        sector_exposure = 0.0
-        relationship = "upstream"
-        exposure_type = "none"
-        
-        # 1. Exact stock symbol match
-        if symbol in kb["exact_stocks"]:
-            sector_exposure = 100.0
-            relationship = kb["exact_stocks"][symbol]["relationship"]
-            exposure_type = "precise"
-        # 2. Industry keywords match
-        elif any(kw in industry for kw in kb["sector_keywords"]):
-            sector_exposure = 60.0
-            exposure_type = "keyword_fallback"
-            
-            # Determine relationship from industry
-            if any(dkw in industry for dkw in ["汽车", "电池", "半导体", "电力设备", "航空", "机场"]):
-                relationship = "downstream"
-            elif any(ukw in industry for ukw in kb["upstream_sectors"]):
-                relationship = "upstream"
-            else:
-                relationship = "upstream" # Default fallback
-                
-        if sector_exposure == 0.0:
-            continue # No exposure, skip
-            
-        # Determine Direction
-        if direction == "harm":
-            stock_direction = "harm" if relationship == "upstream" else "benefit"
-        elif impact_type in ["supply_shortage", "supply_disruption"]:
-            stock_direction = "benefit" if relationship == "upstream" else "harm"
-        elif impact_type == "policy_support":
-            stock_direction = "benefit" if relationship == "upstream" else "harm"
-        else:
-            stock_direction = "benefit" if relationship == "upstream" else "harm"
-            
-        # Fetch Trend Strength from signals
-        # Get the latest signal_date in the database, then find the stock trend_score
-        trend_strength = 50.0
-        latest_sig = db.row(
-            """
-            SELECT trend_score FROM signals 
-            WHERE symbol=? 
-            ORDER BY signal_date DESC LIMIT 1
-            """,
-            (symbol,)
-        )
+    for path in scored_paths:
+        symbol = path.get("stock_symbol") or path["stock_or_company_id"]
+        # Fetch trend score
+        trend_score = 50.0
+        latest_sig = db.row("SELECT trend_score FROM signals WHERE symbol=? ORDER BY signal_date DESC LIMIT 1", (symbol,))
         if latest_sig:
-            trend_strength = float(latest_sig["trend_score"])
+            trend_score = float(latest_sig["trend_score"])
             
-        # Event Score formula:
-        # Event Score = 0.5 * Event Impact + 0.3 * Sector Exposure + 0.2 * Trend Strength
-        event_score = 0.5 * event_impact + 0.3 * sector_exposure + 0.2 * trend_strength
-        event_score = round(min(max(event_score, 0.0), 100.0), 2)
-        
-        # Build causal chain details
-        causal_chain = {
-            "commodity": commodity,
-            "commodity_name": kb["name"],
-            "impact_type": impact_type,
-            "relationship": relationship,
-            "exposure_type": exposure_type,
-            "sector": industry
-        }
-        
-        source_label = "LLM 优先抽取" if extraction_source == "llm" else "规则回退"
-        evidence = (
-            f"新闻事件《{title}》（来源：{source_label}）识别为 {kb['name']} 行业的 {impact_type} 冲击。 "
-            f"该股票属于 {industry} 行业（通过 {exposure_type} 映射，属于 {relationship} 环节）。"
-            f"计算分解：Event Score = 0.5 * Event Impact ({event_impact}) + 0.3 * Sector Exposure ({sector_exposure}) + 0.2 * Trend Strength ({trend_strength}) = {event_score}。 "
-            f"影响方向：{'受益 (benefit)' if stock_direction == 'benefit' else '受损 (harm)'}。"
+        score_data = calculate_stock_score(
+            exposure_score=path["exposure_score"],
+            exposure_confidence=path["confidence"],
+            event_type=event_type,
+            event_intensity=intensity,
+            event_confidence=confidence,
+            trend_strength=trend_score
         )
         
-        stock_scores_to_save.append({
-            "event_id": event_id,
-            "symbol": symbol,
-            "name": name,
-            "industry": industry,
-            "event_score": event_score,
-            "event_impact": event_impact,
-            "sector_exposure": sector_exposure,
-            "trend_strength": trend_strength,
-            "direction": stock_direction,
-            "causal_chain": json.dumps(causal_chain, ensure_ascii=False),
-            "evidence": evidence
-        })
+        # Determine stock direction
+        # Simple rule: if first edge is downstream, flip direction if harm? 
+        # Actually, let's keep it simple for MVP: follow the event's commodity direction if upstream, flip if downstream.
+        stock_direction = direction
+        if path["edges"]:
+            first_edge = path["edges"][0]
+            if first_edge["relation_type"] in ["uses", "downstream"]:
+                stock_direction = "benefit" if direction == "harm" else "harm"
         
+        score_data["direction"] = stock_direction
+        score_data["symbol"] = symbol
+        score_data["entity_id"] = path["stock_or_company_id"]
+        score_data["path"] = path
+        final_stock_scores.append(score_data)
+        
+    final_stock_scores = rank_stocks(final_stock_scores)
+    
     with db.connect() as conn:
-        db._execmany(
-            conn,
-            """
-            INSERT INTO event_stock_scores(
-                event_id, symbol, event_score, event_impact, sector_exposure,
-                trend_strength, direction, causal_chain, evidence
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(event_id, symbol) DO UPDATE SET
-                event_score=excluded.event_score,
-                event_impact=excluded.event_impact,
-                sector_exposure=excluded.sector_exposure,
-                trend_strength=excluded.trend_strength,
-                direction=excluded.direction,
-                causal_chain=excluded.causal_chain,
-                evidence=excluded.evidence
-            """,
-            [
-                (
-                    item["event_id"],
-                    item["symbol"],
-                    item["event_score"],
-                    item["event_impact"],
-                    item["sector_exposure"],
-                    item["trend_strength"],
-                    item["direction"],
-                    item["causal_chain"],
-                    item["evidence"]
-                )
-                for item in stock_scores_to_save
-            ]
-        )
+        # Clear existing paths and scores for this event (if any)
+        db._exec(conn, "DELETE FROM stock_event_scores WHERE event_id=?", (event_id,))
+        db._exec(conn, "DELETE FROM stock_exposures WHERE event_id=?", (event_id,))
+        db._exec(conn, "DELETE FROM reasoning_paths WHERE event_id=?", (event_id,))
+        
+        for idx, item in enumerate(final_stock_scores):
+            path = item["path"]
+            path_id = f"path_{event_id}_{item['symbol']}"
             
-    # V2 transmission scoring integration (failures must not block V1)
-    try:
-        from .transmission_engine import calculate_v2_transmission
-        calculate_v2_transmission(event_id)
-    except Exception as e:
-        import sys
-        print(f"Error calculating V2 transmission in analyze_event_text: {e}", file=sys.stderr)
-
-    # Load and return the saved event with full causal chain and stock scores
+            db._exec(
+                conn,
+                """
+                INSERT INTO reasoning_paths(
+                    path_id, event_id, stock_code, start_entity_id, end_entity_id,
+                    nodes_json, edges_json, path_score, path_length, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    path_id, event_id, item['symbol'], entity_id, item['entity_id'],
+                    json.dumps(path["nodes"], ensure_ascii=False),
+                    json.dumps(path["edges"], ensure_ascii=False),
+                    path["exposure_score"], path["path_length"], datetime.now()
+                )
+            )
+            
+            db._exec(
+                conn,
+                """
+                INSERT INTO stock_exposures(
+                    event_id, stock_code, entity_id, exposure_score, confidence, reason_path_id
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id, item['symbol'], entity_id, path["exposure_score"],
+                    path["confidence"], path_id
+                )
+            )
+            
+            b = item["score_breakdown"]
+            b["direction"] = item["direction"]
+            db._exec(
+                conn,
+                """
+                INSERT INTO stock_event_scores(
+                    event_id, stock_code, final_score, exposure_score, trend_score,
+                    sentiment_score, volume_score, event_intensity, validation_score,
+                    score_breakdown_json, confidence, rank, label, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id, item['symbol'], item["final_score"], b["sector_exposure"],
+                    b["trend_strength"], b["sentiment_score"], b["volume_score"],
+                    intensity, 0.0, json.dumps(b, ensure_ascii=False),
+                    item["confidence"], item["rank"], item["label"], datetime.now()
+                )
+            )
+            
     return get_event_detail_by_id(event_id)
 
 def get_event_detail_by_id(event_id: str) -> dict[str, Any] | None:
-    event = db.row("SELECT * FROM events WHERE id=?", (event_id,))
+    event = db.row("SELECT *, event_id as id FROM event_instances WHERE event_id=?", (event_id,))
     if not event:
         return None
         
-    commodity_impacts = db.rows(
-        "SELECT commodity, impact_type, direction FROM commodity_impacts WHERE event_id=?",
+    impacts = db.rows(
+        "SELECT i.*, k.name AS commodity FROM event_impacts i JOIN kg_entities k ON i.entity_id = k.entity_id WHERE i.event_id=?", 
         (event_id,)
     )
     
-    stock_scores_raw = db.rows(
+    scores = db.rows(
         """
-        SELECT ess.*, s.name, s.industry 
-        FROM event_stock_scores ess
-        JOIN stocks s ON ess.symbol = s.symbol
-        WHERE ess.event_id=?
-        ORDER BY ess.direction ASC, ess.event_score DESC
+        SELECT s.*, r.nodes_json, r.edges_json, st.name, st.industry
+        FROM stock_event_scores s
+        JOIN reasoning_paths r ON s.event_id = r.event_id AND s.stock_code = r.stock_code
+        LEFT JOIN stocks st ON s.stock_code = st.symbol
+        WHERE s.event_id=?
+        ORDER BY s.rank ASC
         """,
         (event_id,)
     )
     
     stock_scores = []
-    for s in stock_scores_raw:
-        s["causal_chain"] = json.loads(s["causal_chain"])
-        stock_scores.append(s)
+    for s in scores:
+        sd = dict(s)
+        if isinstance(sd.get("score_breakdown_json"), str):
+            sd["score_breakdown_json"] = json.loads(sd["score_breakdown_json"])
+        if isinstance(sd.get("nodes_json"), str):
+            sd["nodes_json"] = json.loads(sd["nodes_json"])
+        if isinstance(sd.get("edges_json"), str):
+            sd["edges_json"] = json.loads(sd["edges_json"])
+            
+        b = sd.get("score_breakdown_json", {})
+        sd["direction"] = b.get("direction", "benefit")
+        sd["event_score"] = sd.get("final_score", 0.0)
+        sd["event_impact"] = b.get("event_impact", 0.0)
+        sd["sector_exposure"] = b.get("sector_exposure", 0.0)
+        sd["trend_strength"] = b.get("trend_strength", 0.0)
+        sd["evidence"] = "基于知识图谱的多跳因果推理"
+        
+        stock_scores.append(sd)
         
     event_dict = dict(event)
-    event_dict["commodity_impacts"] = [dict(ci) for ci in commodity_impacts]
+    event_dict["commodity_impacts"] = [dict(i) for i in impacts]
     event_dict["stock_scores"] = stock_scores
-
-    # Add V2 reaction scores if available, without breaking V1 details on failure
-    v2_reaction_scores = []
-    try:
-        v2_raw = db.rows(
-            """
-            SELECT v2.*, s.name, s.industry
-            FROM event_stock_reaction_scores_v2 v2
-            JOIN stocks s ON v2.symbol = s.symbol
-            WHERE v2.event_id=?
-            ORDER BY v2.reaction_score DESC
-            """,
-            (event_id,)
-        )
-        for r in v2_raw:
-            r_dict = dict(r)
-            r_dict["transmission_chain"] = json.loads(r_dict["transmission_chain"])
-            v2_reaction_scores.append(r_dict)
-    except Exception as e:
-        import sys
-        print(f"Error loading V2 scores in get_event_detail_by_id: {e}", file=sys.stderr)
-
-    event_dict["v2_reaction_scores"] = v2_reaction_scores
+    if isinstance(event_dict.get("entities_json"), str):
+        event_dict["entities_json"] = json.loads(event_dict["entities_json"])
+        
     return event_dict

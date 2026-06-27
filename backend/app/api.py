@@ -92,10 +92,9 @@ def health() -> dict:
     if job:
         job["details"] = json.loads(job["details"])
 
-    # Event statistics
-    event_count = db.row("SELECT COUNT(*) AS count FROM events")["count"]
-    score_count = db.row("SELECT COUNT(*) AS count FROM event_stock_scores")["count"]
-    comm_stats_raw = db.rows("SELECT commodity, COUNT(*) AS count FROM commodity_impacts GROUP BY commodity")
+    event_count = db.row("SELECT COUNT(*) AS count FROM event_instances")["count"]
+    score_count = db.row("SELECT COUNT(*) AS count FROM stock_event_scores")["count"]
+    comm_stats_raw = db.rows("SELECT k.name AS commodity, COUNT(*) AS count FROM event_impacts i JOIN kg_entities k ON i.entity_id = k.entity_id GROUP BY k.name")
     commodity_stats = {row["commodity"]: row["count"] for row in comm_stats_raw}
 
     return {
@@ -509,7 +508,7 @@ def get_events(
     params = []
 
     if commodity:
-        where_clauses.append("e.id IN (SELECT event_id FROM commodity_impacts WHERE commodity=?)")
+        where_clauses.append("e.event_id IN (SELECT event_id FROM event_impacts WHERE commodity=?)")
         params.append(commodity)
     if event_type:
         where_clauses.append("e.event_type = ?")
@@ -517,7 +516,7 @@ def get_events(
     if direction:
         where_clauses.append(
             "EXISTS (SELECT 1 FROM event_stock_scores ess "
-            "WHERE ess.event_id=e.id AND ess.direction=?)"
+            "WHERE ess.event_id=e.event_id AND jsonb_extract_path_text(ess.score_breakdown_json, 'direction')=?)"
         )
         params.append(direction)
 
@@ -525,14 +524,14 @@ def get_events(
     offset = (page - 1) * limit
 
     # Count total
-    total_query = f"SELECT COUNT(*) AS count FROM events e {where_str}"
+    total_query = f"SELECT COUNT(*) AS count FROM event_instances e {where_str}"
     total = db.row(total_query, tuple(params))["count"]
 
     # Select events
     query = f"""
-        SELECT e.* FROM events e
+        SELECT e.*, e.event_id as id FROM event_instances e
         {where_str}
-        ORDER BY e.published_at DESC
+        ORDER BY e.occurred_at DESC
         LIMIT ? OFFSET ?
     """
     event_rows = db.rows(query, (*params, limit, offset))
@@ -541,10 +540,13 @@ def get_events(
     events_hydrated = []
     for ev in event_rows:
         ev_dict = dict(ev)
-        ev_dict["commodity_impacts"] = db.rows(
-            "SELECT commodity, impact_type, direction FROM commodity_impacts WHERE event_id=?",
+        impacts = db.rows(
+            "SELECT k.name AS commodity, i.impact_type FROM event_impacts i JOIN kg_entities k ON i.entity_id = k.entity_id WHERE i.event_id=?",
             (ev_dict["id"],)
         )
+        for imp in impacts:
+            imp["direction"] = ev_dict.get("direction", "")
+        ev_dict["commodity_impacts"] = [dict(i) for i in impacts]
         events_hydrated.append(ev_dict)
 
     return {

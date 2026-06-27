@@ -140,3 +140,65 @@ class KGChangeLog(Base):
     reason = Column(String)
     operator = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False)
+
+class EventInstance(Base):
+    __tablename__ = 'event_instances'
+    event_id = Column(String, primary_key=True)
+    event_type = Column(String, nullable=False)
+    subtype = Column(String)
+    title = Column(String, nullable=False)
+    description = Column(String)
+    entities_json = Column(JSONB, nullable=False, default=[])
+    intensity = Column(Float)
+    direction = Column(String)
+    time_window = Column(String)
+    source_evidence_id = Column(String, ForeignKey('evidence.evidence_id'))
+    occurred_at = Column(DateTime)
+    created_at = Column(DateTime, nullable=False)
+
+class EventImpact(Base):
+    __tablename__ = 'event_impacts'
+    impact_id = Column(String, primary_key=True)
+    event_id = Column(String, ForeignKey('event_instances.event_id'), nullable=False)
+    entity_id = Column(String, ForeignKey('kg_entities.entity_id'), nullable=False)
+    impact_type = Column(String)
+    impact_score = Column(Float)
+
+class ReasoningPath(Base):
+    __tablename__ = 'reasoning_paths'
+    path_id = Column(String, primary_key=True)
+    event_id = Column(String, ForeignKey('event_instances.event_id'), nullable=False)
+    stock_code = Column(String, nullable=False)
+    start_entity_id = Column(String)
+    end_entity_id = Column(String)
+    nodes_json = Column(JSONB, nullable=False, default=[])
+    edges_json = Column(JSONB, nullable=False, default=[])
+    path_score = Column(Float, nullable=False, default=0.0)
+    path_length = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False)
+
+class StockExposure(Base):
+    __tablename__ = 'stock_exposures'
+    event_id = Column(String, ForeignKey('event_instances.event_id'), primary_key=True)
+    stock_code = Column(String, primary_key=True)
+    entity_id = Column(String, ForeignKey('kg_entities.entity_id'))
+    exposure_score = Column(Float, nullable=False, default=0.0)
+    confidence = Column(Float, nullable=False, default=1.0)
+    reason_path_id = Column(String, ForeignKey('reasoning_paths.path_id'))
+
+class StockEventScore(Base):
+    __tablename__ = 'stock_event_scores'
+    event_id = Column(String, ForeignKey('event_instances.event_id'), primary_key=True)
+    stock_code = Column(String, primary_key=True)
+    final_score = Column(Float, nullable=False, default=0.0)
+    exposure_score = Column(Float)
+    trend_score = Column(Float)
+    sentiment_score = Column(Float)
+    volume_score = Column(Float)
+    event_intensity = Column(Float)
+    validation_score = Column(Float)
+    score_breakdown_json = Column(JSONB, nullable=False, default={})
+    confidence = Column(Float, nullable=False, default=1.0)
+    rank = Column(Integer)
+    label = Column(String)
+    created_at = Column(DateTime, nullable=False)
