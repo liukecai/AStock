@@ -137,6 +137,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+from .api_candidates import router as candidates_router
+app.include_router(candidates_router)
 
 
 @app.get("/")

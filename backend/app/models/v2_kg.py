@@ -1,6 +1,8 @@
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, Boolean
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, Boolean, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from .base import Base
+
+JSONType = JSON().with_variant(JSONB(), 'postgresql')
 
 class KGEntity(Base):
     __tablename__ = 'kg_entities'
@@ -8,9 +10,9 @@ class KGEntity(Base):
     entity_type = Column(String, nullable=False)
     name = Column(String, nullable=False)
     canonical_name = Column(String, nullable=False)
-    aliases_json = Column(JSONB, nullable=False, default=[])
+    aliases_json = Column(JSONType, nullable=False, default=[])
     description = Column(String, nullable=False, default='')
-    metadata_json = Column(JSONB, nullable=False, default={})
+    metadata_json = Column(JSONType, nullable=False, default={})
     status = Column(String, nullable=False, default='active')
     merged_into_id = Column(String)
     created_at = Column(DateTime, nullable=False)
@@ -63,9 +65,9 @@ class CandidateEntity(Base):
     entity_type = Column(String, nullable=False)
     name = Column(String, nullable=False)
     canonical_name = Column(String, nullable=False)
-    aliases_json = Column(JSONB, nullable=False, default=[])
+    aliases_json = Column(JSONType, nullable=False, default=[])
     description = Column(String, nullable=False, default='')
-    metadata_json = Column(JSONB, nullable=False, default={})
+    metadata_json = Column(JSONType, nullable=False, default={})
     status = Column(String, nullable=False, default='candidate')
     merged_into_id = Column(String)
     created_at = Column(DateTime, nullable=False)
@@ -148,7 +150,7 @@ class EventInstance(Base):
     subtype = Column(String)
     title = Column(String, nullable=False)
     description = Column(String)
-    entities_json = Column(JSONB, nullable=False, default=[])
+    entities_json = Column(JSONType, nullable=False, default=[])
     intensity = Column(Float)
     direction = Column(String)
     time_window = Column(String)
@@ -171,8 +173,8 @@ class ReasoningPath(Base):
     stock_code = Column(String, nullable=False)
     start_entity_id = Column(String)
     end_entity_id = Column(String)
-    nodes_json = Column(JSONB, nullable=False, default=[])
-    edges_json = Column(JSONB, nullable=False, default=[])
+    nodes_json = Column(JSONType, nullable=False, default=[])
+    edges_json = Column(JSONType, nullable=False, default=[])
     path_score = Column(Float, nullable=False, default=0.0)
     path_length = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False)
@@ -197,7 +199,7 @@ class StockEventScore(Base):
     volume_score = Column(Float)
     event_intensity = Column(Float)
     validation_score = Column(Float)
-    score_breakdown_json = Column(JSONB, nullable=False, default={})
+    score_breakdown_json = Column(JSONType, nullable=False, default={})
     confidence = Column(Float, nullable=False, default=1.0)
     rank = Column(Integer)
     label = Column(String)

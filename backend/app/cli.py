@@ -32,6 +32,7 @@ def main() -> None:
             "run",
             "backtest",
             "calibrate",
+            "extract-report",
         ],
     )
     parser.add_argument("--force", action="store_true")
@@ -43,6 +44,8 @@ def main() -> None:
     parser.add_argument("--holding-period", type=int, default=5)
     parser.add_argument("--transaction-cost-bps", type=float, default=0.0)
     parser.add_argument("--output-dir")
+    parser.add_argument("--file", help="File path for extraction")
+    parser.add_argument("--extract-type", choices=["profile", "event"], default="profile")
     args = parser.parse_args()
 
     if args.command == "seed":
@@ -85,6 +88,22 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     elif args.command == "run":
         print(run_signal_pipeline())
+    elif args.command == "extract-report":
+        if not args.file:
+            print("Error: --file is required for extract-report")
+            return
+        with open(args.file, "r", encoding="utf-8") as f:
+            text = f.read()
+        
+        from .services.llm_extractor import LLMExtractorService
+        from . import db
+        extractor = LLMExtractorService()
+        with db.session_scope() as session:
+            if args.extract_type == "profile":
+                res = extractor.extract_company_profile(text, source_evidence_id="cli_test", db=session)
+            else:
+                res = extractor.extract_event(text, source_evidence_id="cli_test", db=session)
+            print(res.model_dump_json(indent=2))
 
 
 if __name__ == "__main__":

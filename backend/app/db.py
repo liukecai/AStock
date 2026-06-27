@@ -414,6 +414,40 @@ def connect() -> Iterator[Any]:
         finally:
             conn.close()
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+_engine = None
+_SessionLocal = None
+
+def get_engine():
+    global _engine, _SessionLocal
+    if _engine is None:
+        db_url = settings.database_url or "sqlite:///" + str(_db_path())
+        # SQLite needs specific connect args
+        connect_args = {}
+        if db_url.startswith("sqlite"):
+            connect_args = {"check_same_thread": False}
+            # For Postgres
+            db_url = db_url.replace("postgres:5432", "localhost:5432")
+        _engine = create_engine(db_url, connect_args=connect_args)
+        _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+    return _engine
+
+@contextmanager
+def session_scope():
+    """Provide a transactional scope around a series of operations."""
+    get_engine()
+    session = _SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
 
 def _table_columns(conn: Any, table: str) -> set[str]:
     """Return the set of column names for *table* in the active DB backend."""
@@ -467,6 +501,9 @@ def _run_ddl(conn: Any, ddl: str) -> None:
 
 def init_db() -> None:
     """Initialize database. Schema creation is now handled by Alembic."""
+    from .models.base import Base
+    from .models.v2_kg import CandidateEntity, CandidateRelation, KGEntity, KGRelation
+    Base.metadata.create_all(get_engine())
     with connect() as conn:
         _seed_commodity_graph(conn)
 
