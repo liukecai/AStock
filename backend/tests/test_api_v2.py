@@ -321,3 +321,61 @@ def test_v2_input_upload_writes_v2_tables(monkeypatch, tmp_path):
         assert legacy_event_row is None
     finally:
         _restore_test_settings(original)
+
+
+def test_v2_input_upload_creates_candidate_for_unknown_entity(monkeypatch, tmp_path):
+    original = _configure_test_settings(tmp_path)
+    try:
+        db.init_db()
+
+        class _FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "event_type": "supply_shortage",
+                    "target_entity": "新材料X",
+                    "direction": "negative",
+                    "intensity": "medium",
+                    "confidence": 0.88,
+                }
+
+        class _FakeAsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json):
+                return _FakeResponse()
+
+        monkeypatch.setattr("app.api_v2.input.httpx.AsyncClient", _FakeAsyncClient)
+
+        with TestClient(app) as client:
+            upload_resp = client.post(
+                "/api/v2/input/upload",
+                json={"text": "新材料X 供应趋紧，价格可能继续上涨", "source_name": "manual"},
+            )
+            assert upload_resp.status_code == 200
+            payload = upload_resp.json()["data"]
+            assert payload["requires_review"] is True
+            assert payload["candidate_status"] == "candidate"
+            assert payload["candidate_entity_id"].startswith("cand_ent_")
+
+        candidate_row = db.row(
+            "SELECT * FROM candidate_entities WHERE entity_id=?",
+            (payload["candidate_entity_id"],),
+        )
+        assert candidate_row is not None
+        assert candidate_row["name"] == "新材料X"
+        assert candidate_row["entity_type"] == "Commodity"
+
+        event_row = db.row("SELECT * FROM event_instances")
+        assert event_row is None
+    finally:
+        _restore_test_settings(original)
