@@ -13,6 +13,19 @@ def wrap_response(data=None, error=None, meta=None):
         "meta": meta or {}
     }
 
+@router.get("/entities/search")
+def search_entities(q: str = Query(..., min_length=1), entity_type: Optional[str] = None):
+    # Support basic fuzzy matching
+    query = "SELECT * FROM kg_entities WHERE name LIKE ?"
+    params = [f"%{q}%"]
+    if entity_type:
+        query += " AND entity_type = ?"
+        params.append(entity_type)
+    query += " LIMIT 50"
+    
+    entities = db.rows(query, tuple(params))
+    return wrap_response(data=entities)
+
 @router.get("/entities/{entity_id}")
 def get_entity(entity_id: str):
     entity = db.row("SELECT * FROM kg_entities WHERE entity_id=?", (entity_id,))
@@ -39,18 +52,7 @@ def get_entity_neighbors(entity_id: str, relation_type: Optional[str] = None):
     neighbors = db.rows(query, tuple(params))
     return wrap_response(data=neighbors)
 
-@router.get("/entities/search")
-def search_entities(q: str = Query(..., min_length=1), entity_type: Optional[str] = None):
-    # Support basic fuzzy matching
-    query = "SELECT * FROM kg_entities WHERE (name LIKE ? OR aliases LIKE ?)"
-    params = [f"%{q}%", f"%{q}%"]
-    if entity_type:
-        query += " AND entity_type = ?"
-        params.append(entity_type)
-    query += " LIMIT 50"
-    
-    entities = db.rows(query, tuple(params))
-    return wrap_response(data=entities)
+
 
 @router.get("/paths")
 def get_paths(source: str, target: str, max_depth: int = Query(4, le=4)):
