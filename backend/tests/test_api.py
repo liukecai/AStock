@@ -226,3 +226,30 @@ def test_legacy_events_filters_and_init_db_idempotent(tmp_path):
         object.__setattr__(settings, "enable_scheduler", original_scheduler)
         object.__setattr__(settings, "demo_data", original_demo)
         object.__setattr__(settings, "admin_secret", original_admin_secret)
+
+
+def test_get_engine_preserves_postgres_dsn_host():
+    original_url = settings.database_url
+    original_engine = db._engine
+    original_session_local = db._SessionLocal
+    original_engine_url = db._engine_url
+    object.__setattr__(
+        settings,
+        "database_url",
+        "postgresql://aquant:changeme@postgres:5432/aquant",
+    )
+    db._engine = None
+    db._SessionLocal = None
+    db._engine_url = None
+
+    try:
+        engine = db.get_engine()
+        assert (
+            engine.url.render_as_string(hide_password=False)
+            == "postgresql://aquant:changeme@postgres:5432/aquant"
+        )
+    finally:
+        object.__setattr__(settings, "database_url", original_url)
+        db._engine = original_engine
+        db._SessionLocal = original_session_local
+        db._engine_url = original_engine_url

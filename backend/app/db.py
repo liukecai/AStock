@@ -429,8 +429,6 @@ def get_engine():
         connect_args = {}
         if db_url.startswith("sqlite"):
             connect_args = {"check_same_thread": False}
-        else:
-            db_url = db_url.replace("postgres:5432", "localhost:5432")
         _engine = create_engine(db_url, connect_args=connect_args)
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
         _engine_url = db_url
