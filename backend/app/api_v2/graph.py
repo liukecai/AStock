@@ -14,14 +14,22 @@ def wrap_response(data=None, error=None, meta=None):
     }
 
 @router.get("/entities/search")
-def search_entities(q: str = Query(..., min_length=1), entity_type: Optional[str] = None):
+def search_entities(q: Optional[str] = Query(None), entity_type: Optional[str] = None):
     # Support basic fuzzy matching
-    query = "SELECT * FROM kg_entities WHERE name LIKE ?"
-    params = [f"%{q}%"]
+    if q:
+        query = "SELECT * FROM kg_entities WHERE name LIKE ?"
+        params = [f"%{q}%"]
+    else:
+        query = "SELECT * FROM kg_entities"
+        params = []
+        
     if entity_type:
-        query += " AND entity_type = ?"
+        if q:
+            query += " AND entity_type = ?"
+        else:
+            query += " WHERE entity_type = ?"
         params.append(entity_type)
-    query += " LIMIT 50"
+    query += " LIMIT 100"
     
     entities = db.rows(query, tuple(params))
     return wrap_response(data=entities)

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { apiV2 } from '../api';
 import * as echarts from 'echarts/core';
 import { GraphChart } from 'echarts/charts';
@@ -51,8 +51,46 @@ let chartInstance = null;
 const graphNodes = ref(new Map()); // id -> node obj
 const graphLinks = ref(new Map()); // id -> link obj
 
+const categorizedEntities = ref({
+  Commodity: [],
+  Company: [],
+  Sector: []
+});
+
+async function loadAllEntities() {
+  loading.value = true;
+  try {
+    const res = await apiV2.searchEntities('');
+    if (res.success && res.data) {
+      categorizedEntities.value = {
+        Commodity: [],
+        Company: [],
+        Sector: []
+      };
+      res.data.forEach(entity => {
+        const type = entity.entity_type;
+        if (!categorizedEntities.value[type]) {
+          categorizedEntities.value[type] = [];
+        }
+        categorizedEntities.value[type].push(entity);
+      });
+    }
+  } catch (err) {
+    console.error("加载分类实体失败：", err);
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(search, (newVal) => {
+  if (!newVal) {
+    searchResults.value = [];
+  }
+});
+
 onMounted(() => {
   window.addEventListener('resize', handleResize);
+  loadAllEntities();
 });
 
 onBeforeUnmount(() => {
@@ -238,6 +276,31 @@ async function expandNode(entityId) {
         <span class="action-hint">点击查看图谱</span>
       </div>
     </div>
+    
+    <!-- Categorized Entities Grid (Default Landing View) -->
+    <div v-if="graphNodes.size === 0 && searchResults.length === 0" class="categorized-container">
+      <h2 class="section-title">知识图谱实体分类一览</h2>
+      <div v-for="(entities, type) in categorizedEntities" :key="type" class="category-block">
+        <template v-if="entities.length > 0">
+          <h3 class="category-hdr">
+            <span class="color-dot" :style="{ backgroundColor: getColorByCategory(type) }"></span>
+            {{ type === 'Commodity' ? '基础商品' : type === 'Company' ? '上市公司' : type === 'Sector' ? '行业板块' : type }} 
+            <span class="count-badge">{{ entities.length }}</span>
+          </h3>
+          <div class="entity-grid">
+            <button 
+              v-for="entity in entities" 
+              :key="entity.entity_id" 
+              class="entity-btn" 
+              :class="'btn-' + type.toLowerCase()"
+              @click="viewGraph(entity)"
+            >
+              {{ entity.name }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
 
     <!-- ECharts Container -->
     <div class="graph-container" v-show="graphNodes.size > 0">
@@ -266,5 +329,75 @@ async function expandNode(entityId) {
 .graph-container { margin-top: 20px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; flex: 1; display: flex; flex-direction: column; }
 .graph-legend { padding: 15px; border-bottom: 1px solid var(--border); font-size: 0.9rem; display: flex; gap: 15px; flex-wrap: wrap; }
 .legend-item { display: inline-block; font-weight: bold; }
+
+/* Categorized view styles */
+.categorized-container {
+  margin-top: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+.section-title {
+  font-size: 1.2rem;
+  margin-top: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.category-block {
+  margin-bottom: 20px;
+}
+.category-block:last-child {
+  margin-bottom: 0;
+}
+.category-hdr {
+  font-size: 1rem;
+  margin-top: 0;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.count-badge {
+  font-size: 0.8rem;
+  background: var(--border);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: normal;
+  color: #888;
+}
+.entity-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.entity-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.85rem;
+}
+.entity-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+.btn-commodity:hover { background: #5470c6; color: #fff; border-color: #5470c6; }
+.btn-product:hover { background: #91cc75; color: #fff; border-color: #91cc75; }
+.btn-sector:hover { background: #fac858; color: #fff; border-color: #fac858; }
+.btn-industry:hover { background: #fac858; color: #fff; border-color: #fac858; }
+.btn-company:hover { background: #ee6666; color: #fff; border-color: #ee6666; }
+.btn-concept:hover { background: #73c0de; color: #fff; border-color: #73c0de; }
+
 
 </style>
