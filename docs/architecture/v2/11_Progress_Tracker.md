@@ -10,7 +10,7 @@
 
 - [x] **Phase 1: KG Schema 与基础表** (100%)
 - [x] **Phase 2: YAML 规则迁移** (100%)
-- [ ] **Phase 3: Reasoning Engine MVP** (0%)
+- [x] **Phase 3: Reasoning Engine MVP** (100%)
 - [ ] **Phase 4: LLM 抽取候选关系** (0%)
 - [ ] **Phase 5: Validation Loop 验证闭环** (0%)
 - [ ] **Phase 6: Web Explainability 前端解释层** (0%)
@@ -56,17 +56,17 @@
 ---
 
 ### Phase 3: Reasoning Engine MVP 
-*状态: 待开始 (Pending)*
+*状态: 已完成 (Completed)*
 
-- [ ] **模块拆解与重构 (消灭 God Class)**
-  - [ ] 拆解 `app/services/event_engine.py`
-  - [ ] 建立 `event_extractor.py` (事件提取与标准化，含 lifecycle_stage)
-  - [ ] 建立 `graph_querier.py` (图谱查询，含 context_date 强约束)
-  - [ ] 建立 `exposure_calculator.py` (敞口计算)
-- [ ] **多因子评分机制**
-  - [ ] 编写初版 `scoring_engine.py`
-- [ ] **测试与验收**
-  - [ ] 输入特定事件（如“六氟化钨短缺”），成功输出候选股票列表及带置信度的解释路径
+- [x] **模块拆解与重构 (消灭 God Class)**
+  - [x] 拆解 `app/services/event_engine.py`
+  - [x] 建立 `event_extractor.py` (事件提取与标准化，含 lifecycle_stage)
+  - [x] 建立 `graph_querier.py` (图谱查询，含 context_date 强约束)
+  - [x] 建立 `exposure_calculator.py` (敞口计算)
+- [x] **多因子评分机制**
+  - [x] 编写初版 `scoring_engine.py`
+- [x] **测试与验收**
+  - [x] 输入特定事件（如“六氟化钨短缺”），成功输出候选股票列表及带置信度的解释路径
 
 ---
 
